@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: hotel-housekeeping
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hotel-housekeeping-db
+          property: connectionString
+
+databases:
+  - name: hotel-housekeeping-db
+    databaseName: hotel_housekeeping
+    user: hk_user

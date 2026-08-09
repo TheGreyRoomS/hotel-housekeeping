@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hotel Housekeeping</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --primary:#0f4c75;--primary-h:#1b6ca8;--accent:#1bc5a4;
+  --dirty:#ef4444;--cleaning:#f97316;--inspection:#a855f7;--clean:#22c55e;
+  --bg:#f1f5f9;--surface:#fff;--border:#e2e8f0;
+  --text:#1e293b;--muted:#64748b;
+  --r:8px;--sh:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);
+  --sh-lg:0 10px 25px rgba(0,0,0,.15);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.hidden{display:none!important;}
+
+/* LOGIN */
+#login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#0f4c75 0%,#1bc5a4 100%);}
+.login-box{background:#fff;border-radius:16px;padding:40px 36px;width:400px;max-width:95vw;box-shadow:var(--sh-lg);}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .hi{font-size:48px;}
+.login-logo h1{font-size:22px;color:var(--primary);font-weight:700;margin-top:8px;}
+.login-logo p{color:var(--muted);font-size:13px;margin-top:3px;}
+.demo-hint{background:#f8fafc;border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-top:18px;font-size:12px;color:var(--muted);}
+.demo-hint strong{color:var(--text);display:block;margin-bottom:6px;}
+.demo-table{width:100%;border-collapse:collapse;font-size:12px;}
+.demo-table td{padding:3px 4px;}
+.demo-table td:last-child{text-align:right;font-family:monospace;color:var(--primary);}
+.demo-table tr:nth-child(even) td{background:#f8fafc;}
+
+/* FORMS */
+.fg{margin-bottom:14px;}
+.fg label{display:block;font-size:13px;font-weight:600;margin-bottom:5px;}
+.fg input,.fg select,.fg textarea{width:100%;padding:9px 13px;border:1.5px solid var(--border);
+  border-radius:var(--r);font-size:14px;color:var(--text);background:#fff;transition:border-color .15s;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--primary);}
+.fg textarea{resize:vertical;min-height:72px;}
+.err{color:var(--dirty);font-size:13px;text-align:center;margin-top:8px;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:9px 16px;border-radius:var(--r);font-size:13px;font-weight:600;
+  cursor:pointer;border:none;transition:all .15s;white-space:nowrap;}
+.btn-primary{background:var(--primary);color:#fff;}.btn-primary:hover{background:var(--primary-h);}
+.btn-ghost{background:transparent;color:var(--text);border:1.5px solid var(--border);}.btn-ghost:hover{background:var(--bg);}
+.btn-danger{background:var(--dirty);color:#fff;}.btn-danger:hover{filter:brightness(.9);}
+.btn-warn{background:var(--cleaning);color:#fff;}.btn-warn:hover{filter:brightness(.9);}
+.btn-purple{background:var(--inspection);color:#fff;}.btn-purple:hover{filter:brightness(.9);}
+.btn-green{background:var(--clean);color:#fff;}.btn-green:hover{filter:brightness(.9);}
+.btn-sm{padding:5px 11px;font-size:12px;}
+.btn-full{width:100%;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+
+/* HEADER */
+#app-header{background:var(--primary);color:#fff;height:58px;padding:0 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;box-shadow:var(--sh-lg);}
+.h-brand{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.h-right{display:flex;align-items:center;gap:10px;font-size:13px;}
+.h-role{background:rgba(255,255,255,.2);padding:3px 9px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.4);transition:background .3s;}
+.sync-dot.syncing{background:#fbbf24;animation:pulse 1s infinite;}
+.sync-dot.ok{background:#4ade80;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* NAV */
+#app-nav{background:#fff;border-bottom:1px solid var(--border);padding:0 20px;display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.nav-tab{padding:13px 16px;font-size:14px;font-weight:500;color:var(--muted);
+  cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap;transition:all .15s;user-select:none;}
+.nav-tab:hover{color:var(--primary);}
+.nav-tab.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:700;}
+
+/* MAIN */
+#app-main{padding:20px;max-width:1300px;margin:0 auto;}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:20px;}
+.stat-card{background:#fff;padding:14px 12px;border-radius:var(--r);box-shadow:var(--sh);}
+.stat-val{font-size:28px;font-weight:800;}
+.stat-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:2px;}
+.sc-dirty .stat-val{color:var(--dirty);}
+.sc-cleaning .stat-val{color:var(--cleaning);}
+.sc-inspection .stat-val{color:var(--inspection);}
+.sc-clean .stat-val{color:var(--clean);}
+
+/* SECTION DIVIDER */
+.sec-div{display:flex;align-items:center;gap:10px;margin:22px 0 14px;}
+.sec-div-line{flex:1;height:1px;background:var(--border);}
+.sec-div-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);white-space:nowrap;}
+
+/* CARDS GRID */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+.item-card{background:#fff;border-radius:12px;box-shadow:var(--sh);cursor:pointer;
+  transition:transform .15s,box-shadow .15s;overflow:hidden;border:2px solid transparent;}
+.item-card:hover{transform:translateY(-2px);box-shadow:var(--sh-lg);}
+.item-card.area-card{background:#fafbff;}
+.item-card.s-dirty{border-color:var(--dirty);}
+.item-card.s-cleaning{border-color:var(--cleaning);}
+.item-card.s-inspection{border-color:var(--inspection);}
+.item-card.s-clean{border-color:var(--clean);}
+.ic-top{padding:12px 14px 6px;display:flex;align-items:flex-start;justify-content:space-between;gap:6px;}
+.ic-name{font-size:20px;font-weight:800;line-height:1.2;}
+.ic-name.area-name{font-size:13px;font-weight:800;line-height:1.3;}
+.ic-body{padding:0 14px 12px;}
+.ic-info{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);margin-top:5px;}
+.ic-bar{height:3px;}
+.ic-bar.s-dirty{background:var(--dirty);}
+.ic-bar.s-cleaning{background:var(--cleaning);}
+.ic-bar.s-inspection{background:var(--inspection);}
+.ic-bar.s-clean{background:var(--clean);}
+.sbadge{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;flex-shrink:0;}
+.sb-dirty{background:#fef2f2;color:var(--dirty);}
+.sb-cleaning{background:#fff7ed;color:var(--cleaning);}
+.sb-inspection{background:#faf5ff;color:var(--inspection);}
+.sb-clean{background:#f0fdf4;color:var(--clean);}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;
+  align-items:center;justify-content:center;z-index:200;padding:20px;}
+.modal{background:#fff;border-radius:16px;width:100%;max-width:580px;
+  max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.3);}
+.modal-hdr{padding:16px 20px 12px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;background:#fff;z-index:1;gap:10px;}
+.modal-title{font-size:16px;font-weight:700;line-height:1.3;}
+.modal-close{font-size:22px;cursor:pointer;color:var(--muted);background:none;border:none;flex-shrink:0;}
+.modal-close:hover{color:var(--text);}
+.modal-body{padding:20px;}
+.modal-foot{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+.sec-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;}
+.msec{margin-bottom:20px;}
+
+/* STATUS PICKER */
+.status-opts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.sopt{padding:10px 8px;border:2px solid var(--border);border-radius:var(--r);
+  cursor:pointer;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;transition:all .15s;}
+.sopt-icon{font-size:20px;margin-bottom:3px;}
+.sopt.sel-dirty{border-color:var(--dirty);background:#fef2f2;color:var(--dirty);}
+.sopt.sel-cleaning{border-color:var(--cleaning);background:#fff7ed;color:var(--cleaning);}
+.sopt.sel-inspection{border-color:var(--inspection);background:#faf5ff;color:var(--inspection);}
+.sopt.sel-clean{border-color:var(--clean);background:#f0fdf4;color:var(--clean);}
+
+/* TIMER */
+.timer-box{background:var(--bg);border-radius:var(--r);padding:14px;text-align:center;margin-bottom:12px;}
+.timer-val{font-size:34px;font-weight:800;font-family:monospace;color:var(--primary);}
+.timer-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+
+/* PHOTOS */
+.photos-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;}
+.ph-thumb{aspect-ratio:1;object-fit:cover;border-radius:6px;width:100%;cursor:pointer;border:2px solid transparent;}
+.ph-thumb:hover{border-color:var(--primary);}
+.ph-upload{aspect-ratio:1;border:2px dashed var(--border);border-radius:6px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--muted);font-size:11px;gap:3px;transition:all .15s;}
+.ph-upload:hover{border-color:var(--primary);color:var(--primary);}
+.ph-item{position:relative;}
+.ph-del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);color:#fff;
+  border:none;border-radius:50%;width:18px;height:18px;font-size:11px;
+  cursor:pointer;display:none;align-items:center;justify-content:center;}
+.ph-item:hover .ph-del{display:flex;}
+
+/* ISSUES */
+.issue-item{background:var(--bg);border-radius:var(--r);padding:12px 14px;
+  border-left:3px solid var(--cleaning);margin-bottom:8px;}
+.issue-item.resolved{border-left-color:var(--clean);opacity:.7;}
+.issue-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.issue-desc{font-size:14px;font-weight:600;}
+.issue-meta{font-size:11px;color:var(--muted);margin-top:3px;}
+.ibadge{font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+.ib-open{background:#fff7ed;color:var(--cleaning);}
+.ib-in_progress{background:#eff6ff;color:#3b82f6;}
+.ib-resolved{background:#f0fdf4;color:var(--clean);}
+
+/* MAINTENANCE PAGE */
+.maint-card{background:#fff;border-radius:var(--r);padding:14px;box-shadow:var(--sh);
+  display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;}
+.src-badge{background:var(--primary);color:#fff;font-weight:700;font-size:12px;
+  padding:8px 10px;border-radius:8px;min-width:56px;max-width:90px;
+  text-align:center;flex-shrink:0;line-height:1.3;word-break:break-word;}
+.mc-body{flex:1;min-width:0;}
+.mc-title{font-size:14px;font-weight:600;margin-bottom:2px;}
+.mc-meta{font-size:11px;color:var(--muted);}
+.mc-acts{display:flex;flex-direction:column;gap:5px;flex-shrink:0;}
+.filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.filt{padding:5px 12px;border-radius:20px;font-size:13px;font-weight:500;
+  cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--muted);transition:all .15s;}
+.filt.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+
+/* HK CARDS */
+.hk-card{background:#fff;border-radius:12px;padding:16px;box-shadow:var(--sh);
+  margin-bottom:12px;border-left:4px solid transparent;}
+.hk-card.s-dirty{border-left-color:var(--dirty);}
+.hk-card.s-cleaning{border-left-color:var(--cleaning);}
+.hk-card.s-inspection{border-left-color:var(--inspection);}
+.hk-card.s-clean{border-left-color:var(--clean);}
+.hk-card.area-hk{background:#fafbff;}
+.hk-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.hk-title{font-size:18px;font-weight:800;}
+.hk-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.hk-expand{font-size:12px;color:var(--muted);cursor:pointer;margin-top:8px;display:flex;align-items:center;gap:4px;}
+.hk-expand:hover{color:var(--primary);}
+.hk-det{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+
+/* ADMIN TABLE */
+.tbl-wrap{overflow-x:auto;background:#fff;border-radius:var(--r);box-shadow:var(--sh);}
+table{width:100%;border-collapse:collapse;}
+thead th{text-align:left;padding:10px 14px;font-size:11px;font-weight:800;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--border);}
+tbody td{padding:11px 14px;font-size:14px;border-bottom:1px solid var(--border);}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover td{background:#f8fafc;}
+.rb{padding:2px 9px;border-radius:10px;font-size:11px;font-weight:800;text-transform:uppercase;}
+.rb-admin{background:#faf5ff;color:var(--inspection);}
+.rb-reception{background:#eff6ff;color:#3b82f6;}
+.rb-housekeeper{background:#f0fdf4;color:var(--clean);}
+.rb-maintenance{background:#fff7ed;color:var(--cleaning);}
+
+/* PHOTO VIEWER */
+#photo-viewer{position:fixed;inset:0;background:rgba(0,0,0,.93);
+  display:flex;align-items:center;justify-content:center;z-index:400;}
+.pv-img{max-width:92vw;max-height:87vh;border-radius:8px;object-fit:contain;}
+.pv-close{position:fixed;top:14px;right:18px;font-size:32px;color:#fff;cursor:pointer;background:none;border:none;}
+.pv-cap{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+  color:rgba(255,255,255,.8);font-size:13px;text-align:center;padding:0 20px;}
+
+/* TOAST */
+#toasts{position:fixed;bottom:20px;right:20px;z-index:500;display:flex;flex-direction:column;gap:8px;}
+.toast{background:#1e293b;color:#fff;padding:10px 15px;border-radius:var(--r);
+  font-size:14px;box-shadow:var(--sh-lg);animation:tin .3s ease;max-width:300px;}
+.toast.success{border-left:3px solid var(--clean);}
+.toast.error{border-left:3px solid var(--dirty);}
+.toast.info{border-left:3px solid var(--accent);}
+@keyframes tin{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* PAGE HEADER */
+.pg-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;}
+.pg-title{font-size:20px;font-weight:800;}
+.pg-sub{font-size:13px;color:var(--muted);margin-top:2px;}
+
+/* ASSIGN GRID */
+.assign-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+.assign-card{background:#fff;border-radius:var(--r);padding:14px;box-shadow:var(--sh);}
+.assign-card.area-ac{background:#fafbff;}
+.ac-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:6px;}
+.ac-name{font-size:15px;font-weight:800;line-height:1.3;}
+
+/* EMPTY */
+.empty{text-align:center;padding:48px 24px;color:var(--muted);}
+.empty .ei{font-size:48px;margin-bottom:14px;}
+
+/* LOADING OVERLAY */
+#loading-screen{position:fixed;inset:0;background:rgba(255,255,255,.85);
+  display:flex;align-items:center;justify-content:center;z-index:600;font-size:15px;color:var(--muted);}
+
+/* TABLET / RESPONSIVE */
+@media(max-width:768px){
+  .cards-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
+  .photos-grid{grid-template-columns:repeat(3,1fr);}
+  #app-main{padding:14px;}
+  .h-right .h-name{display:none;}
+}
+@media(max-width:520px){
+  .overlay{padding:0;align-items:flex-end;}
+  .modal{border-radius:16px 16px 0 0;max-height:95vh;}
+  .cards-grid{grid-template-columns:repeat(2,1fr);}
+  .assign-grid{grid-template-columns:1fr;}
+  #app-header{padding:0 12px;}
+  #app-nav{padding:0 8px;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-page">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="hi">🏨</div>
+      <h1>Boutique Hotel</h1>
+      <p>Housekeeping Management</p>
+    </div>
+    <div class="fg"><label>Username</label><input id="l-user" type="text" placeholder="Enter username" autocomplete="username"></div>
+    <div class="fg"><label>Password</label><input id="l-pass" type="password" placeholder="Enter password" autocomplete="current-password"></div>
+    <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div id="l-err" class="err hidden"></div>
+    <div class="demo-hint">
+      <strong>Demo Accounts</strong>
+      <table class="demo-table">
+        <tr><td>👑 admin</td><td>admin123</td></tr>
+        <tr><td>🛎 reception1 / reception2</td><td>pass123</td></tr>
+        <tr><td>🧹 hk1 · hk2 · hk3</td><td>pass123</td></tr>
+        <tr><td>🔧 maintenance</td><td>pass123</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-shell" class="hidden">
+  <header id="app-header">
+    <div class="h-brand">🏨 <span>Housekeeping</span></div>
+    <div class="h-right">
+      <div class="sync-dot" id="sync-dot" title="Sync status"></div>
+      <span id="h-name" class="h-name"></span>
+      <span id="h-role" class="h-role"></span>
+      <button class="btn btn-ghost btn-sm" style="color:#fff;border-color:rgba(255,255,255,.35)" onclick="doLogout()">Sign Out</button>
+    </div>
+  </header>
+  <nav id="app-nav"></nav>
+  <main id="app-main"></main>
+</div>
+
+<!-- MODALS MOUNT -->
+<div id="overlay-container"></div>
+
+<!-- PHOTO VIEWER -->
+<div id="photo-viewer" class="hidden">
+  <button class="pv-close" onclick="closePhotoViewer()">✕</button>
+  <img id="pv-img" class="pv-img" src="" alt="">
+  <div id="pv-cap" class="pv-cap"></div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- LOADING -->
+<div id="loading-screen" class="hidden">⏳ Loading…</div>
+
+<!-- FILE INPUTS -->
+<input type="file" id="fi-a" accept="image/*" multiple style="display:none">
+<input type="file" id="fi-b" accept="image/*" multiple style="display:none">
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════
+const STATUS_LABEL = {dirty:'Dirty',cleaning:'Cleaning',inspection:'Inspection',clean:'Clean'};
+const STATUS_ICON  = {dirty:'🔴',cleaning:'🧹',inspection:'🔍',clean:'✅'};
+const STATUS_FULL  = {dirty:'Dirty',cleaning:'Busy Cleaning',inspection:'Ready for Inspection',clean:'Inspected & Clean'};
+const POLL_MS = 25000; // sync every 25 seconds
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let token         = null;
+let currentUser   = null; // {id, name, role, username}
+let state         = { rooms: [], areas: [], users: [] };
+let currentView   = 'overview';
+let currentItemId = null;
+let timerInterval = null;
+let pollInterval  = null;
+let photoTarget   = null; // {id, ctx:'modal'|'hk'}
+let issueFilter   = 'open';
+
+// ═══════════════════════════════════════════════════════
+//  API HELPERS
+// ═══════════════════════════════════════════════════════
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
+    ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+  });
+  if (res.status === 401) { doLogout(); throw new Error('Session expired — please log in'); }
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+async function syncState(silent = false) {
+  const dot = document.getElementById('sync-dot');
+  if (dot) dot.className = 'sync-dot syncing';
+  try {
+    const data = await api('/api/state');
+    state = data;
+    if (dot) dot.className = 'sync-dot ok';
+    return true;
+  } catch (e) {
+    if (!silent) toast('Sync error: ' + e.message, 'error');
+    if (dot) dot.className = 'sync-dot';
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+function isAreaId(id) { return typeof id === 'string' && id.startsWith('a'); }
+function findItem(id) {
+  if (isAreaId(id)) return state.areas.find(a => a.id === id);
+  const n = Number(id);
+  return state.rooms.find(r => r.id === n);
+}
+function itemName(item) { return isAreaId(item.id) ? item.name : `Room ${item.id}`; }
+function getPhotos(item) { return isAreaId(item.id) ? (item.photos || []) : (item.minibarPhotos || []); }
+function getUserName(id) { const u = state.users.find(u => u.id === id); return u ? u.name : '—'; }
+function getHKs() { return state.users.filter(u => u.role === 'housekeeper'); }
+
+function isReception() { return currentUser && (currentUser.role === 'reception' || currentUser.role === 'admin'); }
+function isMaint()     { return currentUser && currentUser.role === 'maintenance'; }
+function isAdmin()     { return currentUser && currentUser.role === 'admin'; }
+function isHK()        { return currentUser && currentUser.role === 'housekeeper'; }
+
+function formatDur(ms) {
+  if (!ms || ms < 0) return '00:00:00';
+  const s = Math.floor(ms/1000)%60, m = Math.floor(ms/60000)%60, h = Math.floor(ms/3600000);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function fmtTime(ts) { return ts ? new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—'; }
+function fmtDate(ts) { return ts ? new Date(ts).toLocaleDateString([],{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'; }
+function roleLabel(r) { return {admin:'Admin',reception:'Reception',housekeeper:'Housekeeper',maintenance:'Maintenance'}[r]||r; }
+
+function loading(on) { document.getElementById('loading-screen').classList.toggle('hidden', !on); }
+
+// ═══════════════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════════════
+async function doLogin() {
+  const username = document.getElementById('l-user').value.trim();
+  const password = document.getElementById('l-pass').value;
+  const errEl    = document.getElementById('l-err');
+  const btn      = document.getElementById('login-btn');
+  errEl.classList.add('hidden');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const data = await api('/api/login', { method: 'POST', body: { username, password } });
+    token       = data.token;
+    currentUser = data.user;
+    loading(true);
+    await syncState();
+    loading(false);
+    showApp();
+  } catch (e) {
+    errEl.textContent = e.message || 'Login failed';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+function doLogout() {
+  token = null; currentUser = null;
+  clearInterval(timerInterval); clearInterval(pollInterval);
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('login-page').classList.remove('hidden');
+  document.getElementById('l-user').value = '';
+  document.getElementById('l-pass').value = '';
+  document.getElementById('overlay-container').innerHTML = '';
+}
+
+document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// ═══════════════════════════════════════════════════════
+//  APP SHELL
+// ═══════════════════════════════════════════════════════
+function showApp() {
+  document.getElementById('login-page').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('hidden');
+  document.getElementById('h-name').textContent = currentUser.name;
+  document.getElementById('h-role').textContent = roleLabel(currentUser.role);
+  buildNav();
+  setView(defaultView());
+  // Poll for live updates
+  clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    const ok = await syncState(true);
+    if (ok) refreshOpenModal();
+  }, POLL_MS);
+}
+
+function defaultView() {
+  if (currentUser.role === 'housekeeper') return 'my-rooms';
+  if (currentUser.role === 'maintenance') return 'issues';
+  return 'overview';
+}
+
+function buildNav() {
+  let tabs = [];
+  if (currentUser.role === 'housekeeper') {
+    tabs = [['my-rooms','🧹 My Work'],['all-rooms','🏨 All Spaces']];
+  } else if (currentUser.role === 'maintenance') {
+    tabs = [['issues','🔧 Maintenance']];
+  } else {
+    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance']];
+    if (isAdmin()) tabs.push(['admin','⚙️ Users']);
+  }
+  document.getElementById('app-nav').innerHTML = tabs.map(([id,lbl]) =>
+    `<div class="nav-tab${currentView===id?' active':''}" onclick="setView('${id}')">${lbl}</div>`
+  ).join('');
+}
+
+function setView(v) { currentView = v; buildNav(); renderView(); }
+
+function renderView() {
+  clearInterval(timerInterval);
+  const main = document.getElementById('app-main');
+  switch (currentView) {
+    case 'overview':    main.innerHTML = renderOverview();    startTimers(); break;
+    case 'assignments': main.innerHTML = renderAssignments(); break;
+    case 'my-rooms':    main.innerHTML = renderHKView();      startTimers(); break;
+    case 'all-rooms':   main.innerHTML = renderAllSpaces();   break;
+    case 'issues':      main.innerHTML = renderIssues();      break;
+    case 'admin':       main.innerHTML = renderAdmin();       break;
+  }
+}
+
+function refreshOpenModal() {
+  if (currentItemId !== null) {
+    // quietly refresh modal data without re-opening (avoids scroll jump)
+    const item = findItem(currentItemId);
+    if (item) openItemModal(currentItemId);
+  } else {
+    // just re-render current view
+    renderView();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  VIEWS
+// ═══════════════════════════════════════════════════════
+
+function renderOverview() {
+  const all = [...state.rooms, ...state.areas];
+  const cnt = s => all.filter(i => i.status === s).length;
+  const issues = all.reduce((a,i) => a + i.maintenanceIssues.filter(x => x.status !== 'resolved').length, 0);
+  return `
+    <div class="pg-hdr">
+      <div><div class="pg-title">Overview</div>
+        <div class="pg-sub">${new Date().toLocaleDateString([],{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="doRefresh()">↺ Refresh</button>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val" style="color:var(--primary)">${state.rooms.length + state.areas.length}</div><div class="stat-lbl">Total</div></div>
+      <div class="stat-card sc-dirty"><div class="stat-val">${cnt('dirty')}</div><div class="stat-lbl">Dirty</div></div>
+      <div class="stat-card sc-cleaning"><div class="stat-val">${cnt('cleaning')}</div><div class="stat-lbl">Cleaning</div></div>
+      <div class="stat-card sc-inspection"><div class="stat-val">${cnt('inspection')}</div><div class="stat-lbl">Inspection</div></div>
+      <div class="stat-card sc-clean"><div class="stat-val">${cnt('clean')}</div><div class="stat-lbl">Clean</div></div>
+      ${issues ? `<div class="stat-card" style="border-left:3px solid var(--cleaning)"><div class="stat-val" style="color:var(--cleaning)">${issues}</div><div class="stat-lbl">Open Issues</div></div>` : ''}
+    </div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms (${state.rooms.length})</div><div class="sec-div-line"></div></div>
+    <div class="cards-grid">${state.rooms.map(r => cardHTML(r)).join('')}</div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Common Areas & Spaces (${state.areas.length})</div><div class="sec-div-line"></div></div>
+    <div class="cards-grid">${state.areas.map(a => cardHTML(a)).join('')}</div>`;
+}
+
+function cardHTML(item) {
+  const ia   = isAreaId(item.id);
+  const hk   = item.assignedTo ? getUserName(item.assignedTo) : null;
+  const pics = getPhotos(item).length;
+  const iss  = item.maintenanceIssues.filter(i => i.status !== 'resolved').length;
+  const active = item.status === 'cleaning' && item.cleaningStart;
+  const dur = active ? formatDur(Date.now() - item.cleaningStart)
+    : (item.cleaningStart && item.cleaningEnd ? formatDur(item.cleaningEnd - item.cleaningStart) : null);
+  const did = ia ? `'${item.id}'` : item.id;
+  return `
+    <div class="item-card s-${item.status}${ia?' area-card':''}" onclick="openItemModal(${did})">
+      <div class="ic-top">
+        <div class="ic-name${ia?' area-name':''}">${ia ? `${item.icon} ${item.name}` : `Room ${item.id}`}</div>
+        <div class="sbadge sb-${item.status}">${STATUS_LABEL[item.status]}</div>
+      </div>
+      <div class="ic-body">
+        ${hk ? `<div class="ic-info"><span>🧹</span>${hk}</div>` : '<div class="ic-info" style="color:#cbd5e1">Unassigned</div>'}
+        ${dur ? `<div class="ic-info"><span>⏱</span><span class="live-dur" data-rid="${item.id}">${dur}</span></div>` : ''}
+        ${pics ? `<div class="ic-info"><span>📷</span>${pics} photo${pics>1?'s':''}</div>` : ''}
+        ${iss  ? `<div class="ic-info" style="color:var(--cleaning)"><span>🔧</span>${iss} issue${iss>1?'s':''}</div>` : ''}
+      </div>
+      <div class="ic-bar s-${item.status}"></div>
+    </div>`;
+}
+
+function renderAssignments() {
+  const hks = getHKs();
+  const card = item => {
+    const ia  = isAreaId(item.id);
+    const did = ia ? `'${item.id}'` : item.id;
+    return `
+      <div class="assign-card${ia?' area-ac':''}">
+        <div class="ac-top">
+          <div class="ac-name">${ia ? `${item.icon} ${item.name}` : `Room ${item.id}`}</div>
+          <div class="sbadge sb-${item.status}">${STATUS_LABEL[item.status]}</div>
+        </div>
+        <div class="fg" style="margin-bottom:0">
+          <label style="font-size:12px;margin-bottom:4px;display:block">Housekeeper</label>
+          <select onchange="doAssign(${did},this.value)" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;">
+            <option value="">— Unassigned —</option>
+            ${hks.map(h => `<option value="${h.id}"${item.assignedTo===h.id?' selected':''}>${h.name}</option>`).join('')}
+          </select>
+        </div>
+        ${item.assignedTo ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">✓ ${getUserName(item.assignedTo)}</div>` : ''}
+      </div>`;
+  };
+  return `
+    <div class="pg-hdr"><div><div class="pg-title">Assignments</div><div class="pg-sub">Assign housekeepers to rooms & areas</div></div></div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms</div><div class="sec-div-line"></div></div>
+    <div class="assign-grid">${state.rooms.map(card).join('')}</div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Areas & Spaces</div><div class="sec-div-line"></div></div>
+    <div class="assign-grid">${state.areas.map(card).join('')}</div>`;
+}
+
+function renderHKView() {
+  const myRooms = state.rooms.filter(r => r.assignedTo === currentUser.id);
+  const myAreas = state.areas.filter(a => a.assignedTo === currentUser.id);
+  const total = myRooms.length + myAreas.length;
+  if (!total) return `
+    <div class="pg-hdr"><div class="pg-title">My Work</div></div>
+    <div class="empty"><div class="ei">🛏</div><p>No rooms or areas assigned yet.<br>Check with reception.</p></div>`;
+  return `
+    <div class="pg-hdr"><div><div class="pg-title">My Work</div><div class="pg-sub">${total} space${total>1?'s':''} assigned to you</div></div></div>
+    ${myRooms.length ? `<div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms</div><div class="sec-div-line"></div></div>${myRooms.map(hkCard).join('')}` : ''}
+    ${myAreas.length ? `<div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Areas</div><div class="sec-div-line"></div></div>${myAreas.map(hkCard).join('')}` : ''}`;
+}
+
+function hkCard(item) {
+  const ia     = isAreaId(item.id);
+  const did    = ia ? `'${item.id}'` : item.id;
+  const active = item.status === 'cleaning' && item.cleaningStart;
+  const dur    = active ? formatDur(Date.now() - item.cleaningStart)
+    : (item.cleaningStart && item.cleaningEnd ? formatDur(item.cleaningEnd - item.cleaningStart) : null);
+  const pics   = getPhotos(item);
+  const open   = item.maintenanceIssues.filter(i => i.status !== 'resolved');
+  const sid    = String(item.id).replace(/\W/g,'_');
+  return `
+    <div class="hk-card s-${item.status}${ia?' area-hk':''}">
+      <div class="hk-hdr">
+        <div>
+          <div class="hk-title">${ia ? `${item.icon} ${item.name}` : `Room ${item.id}`}</div>
+          <div style="margin-top:4px"><span class="sbadge sb-${item.status}">${STATUS_FULL[item.status]}</span></div>
+        </div>
+        <div class="hk-acts">
+          ${item.status==='dirty' ? `<button class="btn btn-warn btn-sm" onclick="doStart(${did})">▶ Start</button>` : ''}
+          ${item.status==='cleaning' ? `<button class="btn btn-purple btn-sm" onclick="doEnd(${did})">⏹ Done</button>` : ''}
+          ${item.status==='inspection'||item.status==='clean' ? `<div class="sbadge ${item.status==='inspection'?'sb-inspection':'sb-clean'}" style="padding:6px 10px">${item.status==='inspection'?'Awaiting Inspection':'✓ Clean'}</div>` : ''}
+        </div>
+      </div>
+      ${active||dur ? `
+        <div class="timer-box" style="margin-top:12px">
+          <div class="timer-val"><span class="live-dur" data-rid="${item.id}">${active ? formatDur(Date.now()-item.cleaningStart) : dur}</span></div>
+          <div class="timer-sub">${active ? '⏱ In progress' : 'Duration: '+dur}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">${active ? 'Started '+fmtTime(item.cleaningStart) : fmtTime(item.cleaningStart)+' → '+fmtTime(item.cleaningEnd)}</div>
+        </div>` : ''}
+      <div class="hk-expand" onclick="toggleDet('${sid}')">
+        <span id="ei-${sid}">▸</span> Photos & Issues${open.length ? ` <span style="color:var(--cleaning)">(${open.length})</span>` : ''}
+      </div>
+      <div id="hd-${sid}" class="hk-det hidden">
+        <div class="sec-lbl">📷 ${ia?'Photos':'Minibar Photos'}</div>
+        <div class="photos-grid">
+          ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.data}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
+          <div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>
+        </div>
+        <div class="sec-lbl" style="margin-top:14px">🔧 Issues</div>
+        <div>${item.maintenanceIssues.length ? item.maintenanceIssues.map(iss=>issueHTML(iss,false,item.id)).join('') : '<div style="font-size:13px;color:var(--muted);margin-bottom:8px">None reported.</div>'}</div>
+        <button class="btn btn-warn btn-sm" onclick="openAddIssue(${did})">+ Report Issue</button>
+      </div>
+    </div>`;
+}
+
+function renderAllSpaces() {
+  const all = [...state.rooms, ...state.areas];
+  const cnt = s => all.filter(i => i.status === s).length;
+  return `
+    <div class="pg-hdr"><div class="pg-title">All Spaces</div></div>
+    <div class="stats-row">
+      ${['dirty','cleaning','inspection','clean'].map(s=>`<div class="stat-card sc-${s}"><div class="stat-val">${cnt(s)}</div><div class="stat-lbl">${STATUS_LABEL[s]}</div></div>`).join('')}
+    </div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms</div><div class="sec-div-line"></div></div>
+    <div class="cards-grid">${state.rooms.map(r=>`<div class="item-card s-${r.status}" style="cursor:default"><div class="ic-top"><div class="ic-name">Room ${r.id}</div><div class="sbadge sb-${r.status}">${STATUS_LABEL[r.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${r.assignedTo?getUserName(r.assignedTo):'Unassigned'}</div></div><div class="ic-bar s-${r.status}"></div></div>`).join('')}</div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Areas</div><div class="sec-div-line"></div></div>
+    <div class="cards-grid">${state.areas.map(a=>`<div class="item-card s-${a.status} area-card" style="cursor:default"><div class="ic-top"><div class="ic-name area-name">${a.icon} ${a.name}</div><div class="sbadge sb-${a.status}">${STATUS_LABEL[a.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${a.assignedTo?getUserName(a.assignedTo):'Unassigned'}</div></div><div class="ic-bar s-${a.status}"></div></div>`).join('')}</div>`;
+}
+
+function renderIssues() {
+  const all = [];
+  state.rooms.forEach(r => r.maintenanceIssues.forEach(i => all.push({...i, srcId:r.id, srcName:`Room ${r.id}`})));
+  state.areas.forEach(a => a.maintenanceIssues.forEach(i => all.push({...i, srcId:a.id, srcName:`${a.icon} ${a.name}`})));
+  const filtered = issueFilter==='all' ? all : all.filter(i=>i.status!=='resolved');
+  const open = all.filter(i=>i.status!=='resolved').length;
+  return `
+    <div class="pg-hdr"><div><div class="pg-title">Maintenance Issues</div><div class="pg-sub">${open} open</div></div></div>
+    <div class="filter-row">
+      <div class="filt${issueFilter==='open'?' active':''}" onclick="setFilter('open')">Open (${open})</div>
+      <div class="filt${issueFilter==='all'?' active':''}" onclick="setFilter('all')">All (${all.length})</div>
+    </div>
+    ${!filtered.length ? `<div class="empty"><div class="ei">✅</div><p>No ${issueFilter==='open'?'open ':''}issues!</p></div>` :
+      filtered.map(iss => {
+        const did = isAreaId(iss.srcId) ? `'${iss.srcId}'` : iss.srcId;
+        return `
+        <div class="maint-card">
+          <div class="src-badge">${iss.srcName}</div>
+          <div class="mc-body">
+            <div class="mc-title">${iss.description}</div>
+            <div class="mc-meta">By ${getUserName(iss.reportedBy)} · ${fmtDate(iss.reportedAt)}</div>
+            ${iss.status==='resolved'?`<div class="mc-meta" style="color:var(--clean)">✓ Resolved ${fmtDate(iss.resolvedAt)}</div>`:''}
+            ${iss.resolveNote?`<div class="mc-meta">Note: ${iss.resolveNote}</div>`:''}
+          </div>
+          <div class="mc-acts">
+            <span class="ibadge ib-${iss.status}">${iss.status==='open'?'Open':iss.status==='in_progress'?'In Progress':'Resolved'}</span>
+            ${(isMaint()||isReception())&&iss.status!=='resolved' ? `
+              ${iss.status==='open'?`<button class="btn btn-sm" style="background:#eff6ff;color:#3b82f6;font-size:11px" onclick="doIssueStatus(${did},'${iss.id}','in_progress')">In Progress</button>`:''}
+              <button class="btn btn-green btn-sm" onclick="openResolve(${did},'${iss.id}')">✓ Resolve</button>
+            ` : ''}
+          </div>
+        </div>`;
+      }).join('')}`;
+}
+function setFilter(f) { issueFilter = f; renderView(); }
+
+function renderAdmin() {
+  const cls = {admin:'rb-admin',reception:'rb-reception',housekeeper:'rb-housekeeper',maintenance:'rb-maintenance'};
+  return `
+    <div class="pg-hdr">
+      <div><div class="pg-title">Users</div><div class="pg-sub">${state.users.length} accounts</div></div>
+      <button class="btn btn-primary" onclick="openUserModal()">+ Add User</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Username</th><th>Role</th><th></th></tr></thead>
+        <tbody>
+          ${state.users.map(u=>`
+            <tr>
+              <td><strong>${u.name}</strong></td>
+              <td><code style="font-size:13px">${u.username}</code></td>
+              <td><span class="rb ${cls[u.role]||''}">${roleLabel(u.role)}</span></td>
+              <td>
+                <button class="btn btn-ghost btn-sm" onclick="openUserModal('${u.id}')">Edit</button>
+                ${u.id!==currentUser.id?`<button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="doDeleteUser('${u.id}')">Delete</button>`:''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  ITEM MODAL
+// ═══════════════════════════════════════════════════════
+function openItemModal(id) {
+  currentItemId = id;
+  const item = findItem(id);
+  if (!item) return;
+  const ia    = isAreaId(id);
+  const did   = ia ? `'${id}'` : id;
+  const hks   = getHKs();
+  const pics  = getPhotos(item);
+  const open  = item.maintenanceIssues.filter(i=>i.status!=='resolved').length;
+  const active = item.status==='cleaning' && item.cleaningStart;
+  const dur   = active ? formatDur(Date.now()-item.cleaningStart)
+    : (item.cleaningStart&&item.cleaningEnd ? formatDur(item.cleaningEnd-item.cleaningStart) : null);
+
+  document.getElementById('overlay-container').innerHTML = `
+    <div class="overlay" id="item-overlay" onclick="if(event.target.id==='item-overlay')closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-hdr">
+          <div class="modal-title">${ia?item.icon+' ':''} ${itemName(item)} <span class="sbadge sb-${item.status}" style="margin-left:6px">${STATUS_FULL[item.status]}</span></div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${isReception() ? `
+          <div class="msec">
+            <div class="sec-lbl">Status</div>
+            <div class="status-opts">
+              ${['dirty','cleaning','inspection','clean'].map(s=>`
+                <div class="sopt${item.status===s?' sel-'+s:''}" onclick="doStatus(${did},'${s}')">
+                  <div class="sopt-icon">${STATUS_ICON[s]}</div>${STATUS_FULL[s]}
+                </div>`).join('')}
+            </div>
+          </div>
+          <div class="msec">
+            <div class="sec-lbl">Housekeeper</div>
+            <select onchange="doAssign(${did},this.value)" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;">
+              <option value="">— Unassigned —</option>
+              ${hks.map(h=>`<option value="${h.id}"${item.assignedTo===h.id?' selected':''}>${h.name}</option>`).join('')}
+            </select>
+          </div>` : ''}
+          ${dur||active ? `
+          <div class="msec">
+            <div class="sec-lbl">⏱ Cleaning Timer</div>
+            <div class="timer-box">
+              <div class="timer-val"><span class="live-dur" data-rid="${id}">${dur||'00:00:00'}</span></div>
+              <div class="timer-sub">${active?'Cleaning in progress':'Completed'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px">${fmtTime(item.cleaningStart)}${item.cleaningEnd?' → '+fmtTime(item.cleaningEnd):'→ now'}${item.assignedTo?' · '+getUserName(item.assignedTo):''}</div>
+            </div>
+          </div>` : ''}
+          ${isReception() ? `
+          <div class="msec">
+            <div class="sec-lbl">Notes</div>
+            <textarea id="modal-notes" placeholder="Add notes…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px">${item.notes||''}</textarea>
+            <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doNotes(${did})">Save Notes</button>
+          </div>` : ''}
+          <div class="msec">
+            <div class="sec-lbl">📷 ${ia?'Photos':'Minibar Photos'} (${pics.length})</div>
+            <div class="photos-grid">
+              ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.data}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
+              <div class="ph-upload" onclick="triggerUpload(${did},'modal')"><div style="font-size:22px">📷</div><div>Add Photo</div></div>
+            </div>
+          </div>
+          <div class="msec">
+            <div class="sec-lbl">🔧 Maintenance Issues (${open} open)</div>
+            <div>${item.maintenanceIssues.length ? item.maintenanceIssues.map(iss=>issueHTML(iss,true,id)).join('') : '<div style="font-size:13px;color:var(--muted);margin-bottom:8px">No issues.</div>'}</div>
+            <button class="btn btn-warn btn-sm" onclick="openAddIssue(${did})">+ Report Issue</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  startTimers();
+}
+
+function closeModal() {
+  document.getElementById('overlay-container').innerHTML = '';
+  currentItemId = null;
+}
+
+function issueHTML(iss, showActions, itemId) {
+  const did = isAreaId(itemId) ? `'${itemId}'` : itemId;
+  return `
+    <div class="issue-item${iss.status==='resolved'?' resolved':''}">
+      <div class="issue-top">
+        <div>
+          <div class="issue-desc">${iss.description}</div>
+          <div class="issue-meta">By ${getUserName(iss.reportedBy)} · ${fmtDate(iss.reportedAt)}</div>
+          ${iss.status==='resolved'?`<div class="issue-meta" style="color:var(--clean)">✓ ${fmtDate(iss.resolvedAt)}</div>`:''}
+          ${iss.resolveNote?`<div class="issue-meta">Note: ${iss.resolveNote}</div>`:''}
+        </div>
+        <span class="ibadge ib-${iss.status}">${iss.status==='open'?'Open':iss.status==='in_progress'?'In Progress':'Resolved'}</span>
+      </div>
+      ${showActions&&iss.status!=='resolved'&&(isReception()||isMaint()) ? `
+        <div style="margin-top:8px;display:flex;gap:6px">
+          ${iss.status==='open'?`<button class="btn btn-sm" style="background:#eff6ff;color:#3b82f6;font-size:11px" onclick="doIssueStatus(${did},'${iss.id}','in_progress')">In Progress</button>`:''}
+          <button class="btn btn-green btn-sm" onclick="openResolve(${did},'${iss.id}')">✓ Resolve</button>
+        </div>` : ''}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  ASYNC ACTIONS
+// ═══════════════════════════════════════════════════════
+
+async function doRefresh() {
+  await syncState();
+  renderView();
+}
+
+async function doAssign(id, userId) {
+  try {
+    const type = isAreaId(id) ? 'areas' : 'rooms';
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ assignedTo: userId||null } });
+    await syncState(true);
+    const item = findItem(id);
+    toast(userId ? `${itemName(item)} → ${getUserName(userId)}` : `${itemName(item)} unassigned`, 'info');
+    if (currentItemId !== null) openItemModal(id); else renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doStatus(id, status) {
+  try {
+    const item = findItem(id);
+    const body = { status };
+    if (status==='cleaning' && item.status!=='cleaning') { body.cleaningStart=Date.now(); body.cleaningEnd=null; }
+    if (item.status==='cleaning' && status!=='cleaning' && !item.cleaningEnd) { body.cleaningEnd=Date.now(); }
+    const type = isAreaId(id) ? 'areas' : 'rooms';
+    await api(`/api/${type}/${id}`, { method:'PATCH', body });
+    await syncState(true);
+    toast(`${itemName(findItem(id))} → ${STATUS_FULL[status]}`, 'success');
+    openItemModal(id);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doStart(id) {
+  try {
+    const type = isAreaId(id) ? 'areas' : 'rooms';
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ status:'cleaning', cleaningStart:Date.now(), cleaningEnd:null } });
+    await syncState(true);
+    toast(`${itemName(findItem(id))}: Cleaning started ▶`, 'success');
+    renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doEnd(id) {
+  try {
+    const type = isAreaId(id) ? 'areas' : 'rooms';
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ status:'inspection', cleaningEnd:Date.now() } });
+    await syncState(true);
+    toast(`${itemName(findItem(id))}: Done — ready for inspection ✓`, 'success');
+    renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doNotes(id) {
+  try {
+    const notes = document.getElementById('modal-notes').value;
+    const type  = isAreaId(id) ? 'areas' : 'rooms';
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ notes } });
+    toast('Notes saved','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── PHOTOS ──
+function triggerUpload(id, ctx) {
+  photoTarget = { id, ctx };
+  const fi = ctx === 'hk' ? document.getElementById('fi-a') : document.getElementById('fi-b');
+  fi.value = ''; fi.click();
+}
+
+['fi-a','fi-b'].forEach(fid => {
+  document.getElementById(fid).addEventListener('change', async function() {
+    if (!photoTarget) return;
+    const { id, ctx } = photoTarget;
+    const files = Array.from(this.files);
+    if (!files.length) return;
+    loading(true);
+    try {
+      for (const file of files) {
+        const data = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        });
+        const itemType = isAreaId(id) ? 'area' : 'room';
+        await api('/api/photos', { method:'POST', body:{ itemType, itemId:id, data, caption:file.name } });
+      }
+      await syncState(true);
+      toast(`${files.length} photo${files.length>1?'s':''} uploaded 📷`, 'success');
+      if (ctx === 'modal') openItemModal(id); else renderView();
+    } catch(e) { toast(e.message,'error'); }
+    finally { loading(false); }
+  });
+});
+
+async function doDelPhoto(id, photoId, e) {
+  e.stopPropagation();
+  if (!confirm('Delete this photo?')) return;
+  try {
+    await api(`/api/photos/${photoId}`, { method:'DELETE' });
+    await syncState(true);
+    toast('Photo deleted','info');
+    if (currentItemId !== null) openItemModal(id); else renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function viewPhoto(photoId, id) {
+  const item = findItem(id);
+  const p    = item ? getPhotos(item).find(p=>p.id===photoId) : null;
+  if (!p) return;
+  document.getElementById('pv-img').src = p.data;
+  document.getElementById('pv-cap').textContent = `${itemName(item)} · ${p.caption||''} · ${fmtDate(p.timestamp)}`;
+  document.getElementById('photo-viewer').classList.remove('hidden');
+}
+function closePhotoViewer() { document.getElementById('photo-viewer').classList.add('hidden'); }
+document.getElementById('photo-viewer').addEventListener('click', e => { if (e.target===document.getElementById('photo-viewer')) closePhotoViewer(); });
+
+// ── ISSUES ──
+function openAddIssue(id) {
+  const did = isAreaId(id) ? `'${id}'` : id;
+  const item = findItem(id);
+  const w = document.createElement('div');
+  w.id = 'issue-wrapper';
+  w.innerHTML = `
+    <div class="overlay" id="issue-ov" onclick="if(event.target.id==='issue-ov')closeExtra('issue-wrapper')">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="modal-hdr"><div class="modal-title">Report Issue — ${itemName(item)}</div><button class="modal-close" onclick="closeExtra('issue-wrapper')">✕</button></div>
+        <div class="modal-body">
+          <div class="fg"><label>Description</label><textarea id="iss-desc" placeholder="Describe the maintenance issue…" rows="4"></textarea></div>
+          <div id="iss-err" class="err hidden"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeExtra('issue-wrapper')">Cancel</button>
+          <button class="btn btn-warn" onclick="doAddIssue(${did})">🔧 Submit</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(w);
+  setTimeout(() => { const t=document.getElementById('iss-desc'); if(t) t.focus(); }, 50);
+}
+
+async function doAddIssue(id) {
+  const desc = (document.getElementById('iss-desc')||{}).value?.trim();
+  if (!desc) { const e=document.getElementById('iss-err'); e.textContent='Please describe the issue.'; e.classList.remove('hidden'); return; }
+  try {
+    const itemType = isAreaId(id) ? 'area' : 'room';
+    await api('/api/issues', { method:'POST', body:{ itemType, itemId:id, description:desc } });
+    await syncState(true);
+    closeExtra('issue-wrapper');
+    toast('Issue reported 🔧','info');
+    if (currentItemId !== null) openItemModal(id); else renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doIssueStatus(id, issueId, status) {
+  try {
+    await api(`/api/issues/${issueId}`, { method:'PATCH', body:{ status } });
+    await syncState(true);
+    toast(`Issue: ${status==='in_progress'?'In Progress':'Updated'}`, 'success');
+    if (currentItemId !== null) openItemModal(id); else renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function openResolve(id, issueId) {
+  const did = isAreaId(id) ? `'${id}'` : id;
+  const w = document.createElement('div');
+  w.id = 'resolve-wrapper';
+  w.innerHTML = `
+    <div class="overlay" id="res-ov" onclick="if(event.target.id==='res-ov')closeExtra('resolve-wrapper')">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="modal-hdr"><div class="modal-title">Resolve Issue</div><button class="modal-close" onclick="closeExtra('resolve-wrapper')">✕</button></div>
+        <div class="modal-body">
+          <div class="fg"><label>Resolution Notes (optional)</label><textarea id="res-note" placeholder="What was done?" rows="3"></textarea></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeExtra('resolve-wrapper')">Cancel</button>
+          <button class="btn btn-green" onclick="doResolve(${did},'${issueId}')">✓ Mark Resolved</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(w);
+  setTimeout(() => { const t=document.getElementById('res-note'); if(t) t.focus(); }, 50);
+}
+
+async function doResolve(id, issueId) {
+  const note = (document.getElementById('res-note')||{}).value?.trim() || '';
+  try {
+    await api(`/api/issues/${issueId}`, { method:'PATCH', body:{ status:'resolved', resolveNote:note } });
+    await syncState(true);
+    closeExtra('resolve-wrapper');
+    toast('Issue resolved ✓','success');
+    if (currentItemId !== null) openItemModal(id); else renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── USERS ──
+function openUserModal(editId) {
+  const u = editId ? state.users.find(u=>u.id===editId) : null;
+  const w = document.createElement('div');
+  w.id = 'user-wrapper';
+  w.innerHTML = `
+    <div class="overlay" id="user-ov" onclick="if(event.target.id==='user-ov')closeExtra('user-wrapper')">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="modal-hdr"><div class="modal-title">${u?'Edit User':'Add User'}</div><button class="modal-close" onclick="closeExtra('user-wrapper')">✕</button></div>
+        <div class="modal-body">
+          <div class="fg"><label>Full Name</label><input id="u-name" value="${u?u.name:''}" placeholder="e.g. Maria Santos"></div>
+          <div class="fg"><label>Username</label><input id="u-username" value="${u?u.username:''}" placeholder="e.g. hk4"></div>
+          <div class="fg"><label>Password</label><input id="u-pass" type="password" placeholder="${u?'Leave blank to keep current':'Set password'}"></div>
+          <div class="fg"><label>Role</label>
+            <select id="u-role">
+              ${['admin','reception','housekeeper','maintenance'].map(r=>`<option value="${r}"${u&&u.role===r?' selected':''}>${roleLabel(r)}</option>`).join('')}
+            </select>
+          </div>
+          <div id="u-err" class="err hidden"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeExtra('user-wrapper')">Cancel</button>
+          <button class="btn btn-primary" onclick="doSaveUser('${editId||''}')">${u?'Save':'Add User'}</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(w);
+}
+
+async function doSaveUser(editId) {
+  const name     = document.getElementById('u-name').value.trim();
+  const username = document.getElementById('u-username').value.trim();
+  const password = document.getElementById('u-pass').value;
+  const role     = document.getElementById('u-role').value;
+  const errEl    = document.getElementById('u-err');
+  if (!name || !username) { errEl.textContent='Name and username required.'; errEl.classList.remove('hidden'); return; }
+  if (!editId && !password) { errEl.textContent='Password required for new users.'; errEl.classList.remove('hidden'); return; }
+  try {
+    if (editId) {
+      const body = { name, username, role };
+      if (password) body.password = password;
+      await api(`/api/users/${editId}`, { method:'PATCH', body });
+      toast('User updated','success');
+    } else {
+      await api('/api/users', { method:'POST', body:{ name, username, password, role } });
+      toast(`${name} added as ${roleLabel(role)}`,'success');
+    }
+    await syncState(true);
+    closeExtra('user-wrapper');
+    renderView();
+  } catch(e) { errEl.textContent=e.message; errEl.classList.remove('hidden'); }
+}
+
+async function doDeleteUser(id) {
+  if (!confirm('Delete this user?')) return;
+  try {
+    await api(`/api/users/${id}`, { method:'DELETE' });
+    await syncState(true);
+    toast('User deleted','info');
+    renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ── HELPERS ──
+function closeExtra(id) { const el=document.getElementById(id); if(el) el.remove(); }
+
+function toggleDet(sid) {
+  const d = document.getElementById(`hd-${sid}`);
+  const i = document.getElementById(`ei-${sid}`);
+  if (!d) return;
+  const open = d.classList.contains('hidden');
+  d.classList.toggle('hidden', !open);
+  if (i) i.textContent = open ? '▾' : '▸';
+}
+
+function startTimers() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    document.querySelectorAll('.live-dur').forEach(el => {
+      const rid  = el.dataset.rid;
+      const item = findItem(rid);
+      if (item && item.status==='cleaning' && item.cleaningStart) {
+        el.textContent = formatDur(Date.now() - item.cleaningStart);
+      }
+    });
+  }, 1000);
+}
+
+function toast(msg, type='info') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`; t.textContent = msg;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => t.style.opacity='0', 3200);
+  setTimeout(() => t.remove(), 3500);
+}
+</script>
+</body>
+</html>
