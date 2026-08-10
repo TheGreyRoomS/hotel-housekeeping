@@ -251,6 +251,24 @@ tbody tr:hover td{background:#f8fafc;}
 .empty{text-align:center;padding:48px 24px;color:var(--muted);}
 .empty .ei{font-size:48px;margin-bottom:14px;}
 
+/* HISTORY */
+.hist-date-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+.hist-date-bar input[type=date]{padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;color:var(--text);}
+.hist-section{background:#fff;border-radius:var(--r);box-shadow:var(--sh);margin-bottom:18px;overflow:hidden;}
+.hist-section-hdr{padding:12px 16px;background:#f8fafc;border-bottom:1px solid var(--border);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);}
+.hist-log-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);font-size:13px;}
+.hist-log-row:last-child{border-bottom:none;}
+.hist-item-badge{background:var(--primary);color:#fff;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;white-space:nowrap;min-width:58px;text-align:center;}
+.hist-log-body{flex:1;min-width:0;}
+.hist-log-name{font-weight:700;}
+.hist-log-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.hist-dur{font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap;}
+.hist-photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;padding:12px 16px;}
+.hist-photo-wrap{position:relative;}
+.hist-photo-wrap img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;}
+.hist-photo-wrap img:hover{border-color:var(--primary);}
+.hist-photo-meta{font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
 /* LOADING OVERLAY */
 #loading-screen{position:fixed;inset:0;background:rgba(255,255,255,.85);
   display:flex;align-items:center;justify-content:center;z-index:600;font-size:15px;color:var(--muted);}
@@ -491,7 +509,7 @@ function buildNav() {
   } else if (currentUser.role === 'maintenance') {
     tabs = [['issues','🔧 Maintenance']];
   } else {
-    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance']];
+    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance'],['history','📅 History']];
     if (isAdmin()) tabs.push(['admin','⚙️ Users']);
   }
   document.getElementById('app-nav').innerHTML = tabs.map(([id,lbl]) =>
@@ -510,6 +528,7 @@ function renderView() {
     case 'my-rooms':    main.innerHTML = renderHKView();      startTimers(); break;
     case 'all-rooms':   main.innerHTML = renderAllSpaces();   break;
     case 'issues':      main.innerHTML = renderIssues();      break;
+    case 'history':     main.innerHTML = renderHistoryShell(); loadHistory(); break;
     case 'admin':       main.innerHTML = renderAdmin();       break;
   }
 }
@@ -1123,6 +1142,110 @@ function startTimers() {
       }
     });
   }, 1000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  HISTORY
+// ═══════════════════════════════════════════════════════
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function renderHistoryShell() {
+  return `
+    <div class="pg-hdr">
+      <div><div class="pg-title">📅 History</div><div class="pg-sub">Cleaning logs & minibar photos by day</div></div>
+    </div>
+    <div class="hist-date-bar">
+      <input type="date" id="hist-date" value="${todayStr()}" max="${todayStr()}" onchange="loadHistory()">
+      <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↺ Load</button>
+    </div>
+    <div id="hist-content"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
+}
+
+async function loadHistory() {
+  const dateEl = document.getElementById('hist-date');
+  if (!dateEl) return;
+  const date = dateEl.value || todayStr();
+  const cont = document.getElementById('hist-content');
+  if (!cont) return;
+  cont.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  try {
+    const data = await api(`/api/history?date=${date}`);
+    const { logs, photos } = data;
+
+    // Group photos by item
+    const photosByItem = {};
+    photos.forEach(p => {
+      const key = `${p.itemType}:${p.itemId}`;
+      if (!photosByItem[key]) photosByItem[key] = [];
+      photosByItem[key].push(p);
+    });
+
+    // All item keys that have photos
+    const photoKeys = Object.keys(photosByItem);
+
+    let html = '';
+
+    // ── Cleaning Logs ──
+    html += `<div class="hist-section">
+      <div class="hist-section-hdr">🧹 Cleaning Sessions (${logs.length})</div>`;
+    if (!logs.length) {
+      html += '<div class="hist-log-row" style="color:var(--muted);font-style:italic">No cleaning sessions recorded for this day.</div>';
+    } else {
+      logs.forEach(l => {
+        const endTime = l.endedAt ? new Date(l.endedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—';
+        const dur = l.durationMs ? formatDur(l.durationMs) : '—';
+        html += `
+          <div class="hist-log-row">
+            <div class="hist-item-badge">${l.itemType==='room'?`Rm ${l.itemId}`:l.itemName.split(' ')[0]}</div>
+            <div class="hist-log-body">
+              <div class="hist-log-name">${l.itemName}</div>
+              <div class="hist-log-meta">By ${l.cleanedBy||'—'} · Finished ${endTime}</div>
+            </div>
+            <div class="hist-dur">⏱ ${dur}</div>
+          </div>`;
+      });
+    }
+    html += '</div>';
+
+    // ── Minibar / Area Photos ──
+    html += `<div class="hist-section">
+      <div class="hist-section-hdr">📷 Photos Uploaded (${photos.length})</div>`;
+    if (!photos.length) {
+      html += '<div class="hist-log-row" style="color:var(--muted);font-style:italic">No photos uploaded this day.</div>';
+      html += '</div>';
+    } else {
+      // Group by item for a cleaner display
+      photoKeys.forEach(key => {
+        const ps = photosByItem[key];
+        const [type, id] = key.split(':');
+        let label = type === 'room' ? `Room ${id} — Minibar` : (state.areas.find(a=>a.id===id)?.name || id);
+        html += `<div style="padding:10px 16px 4px;font-size:12px;font-weight:700;color:var(--muted);border-top:1px solid var(--border)">${label}</div>
+          <div class="hist-photos-grid">`;
+        ps.forEach(p => {
+          const t = p.uploadedAt ? new Date(p.uploadedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+          html += `<div class="hist-photo-wrap">
+            <img src="${p.data}" onclick="histViewPhoto('${p.id}','${p.data}','${label}','${t}')" title="${p.caption||''}">
+            <div class="hist-photo-meta">${t}${p.uploadedBy?' · '+p.uploadedBy:''}</div>
+          </div>`;
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    cont.innerHTML = html;
+  } catch(e) {
+    cont.innerHTML = `<div class="empty"><div class="ei">⚠️</div><p>${e.message}</p></div>`;
+  }
+}
+
+function histViewPhoto(id, data, label, time) {
+  document.getElementById('pv-img').src = data;
+  document.getElementById('pv-cap').textContent = `${label} · ${time}`;
+  document.getElementById('photo-viewer').classList.remove('hidden');
 }
 
 function toast(msg, type='info') {

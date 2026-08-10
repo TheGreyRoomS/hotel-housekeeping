@@ -127,6 +127,17 @@ async function initDB() {
         resolved_at  BIGINT,
         resolve_note TEXT DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS cleaning_logs (
+        id          TEXT PRIMARY KEY,
+        item_type   TEXT NOT NULL,
+        item_id     TEXT NOT NULL,
+        item_name   TEXT NOT NULL,
+        cleaned_by  TEXT,
+        started_at  BIGINT,
+        ended_at    BIGINT NOT NULL,
+        duration_ms BIGINT
+      );
     `);
 
     // Seed users if empty
@@ -278,6 +289,12 @@ app.patch('/api/rooms/:id', auth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { status, assignedTo, notes, cleaningStart, cleaningEnd } = req.body;
+    // Fetch current row BEFORE update so we get cleaning_start
+    let prevRow = null;
+    if (cleaningEnd) {
+      const cur = await pool.query('SELECT cleaning_start, assigned_to FROM rooms WHERE id=$1', [id]);
+      prevRow = cur.rows[0] || null;
+    }
     const parts = [], vals = [];
     let n = 1;
     if (status        !== undefined) { parts.push(`status=$${n++}`);         vals.push(status); }
@@ -288,6 +305,15 @@ app.patch('/api/rooms/:id', auth, async (req, res) => {
     if (!parts.length) return res.status(400).json({ error: 'Nothing to update' });
     vals.push(id);
     await pool.query(`UPDATE rooms SET ${parts.join(',')} WHERE id=$${n}`, vals);
+    // Log completed cleaning session
+    if (cleaningEnd) {
+      const start = prevRow?.cleaning_start ? Number(prevRow.cleaning_start) : null;
+      const who   = prevRow?.assigned_to || assignedTo || req.user.id;
+      await pool.query(
+        'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [uid(), 'room', String(id), `Room ${id}`, who, start, cleaningEnd, start ? cleaningEnd - start : null]
+      );
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('Room update error:', e);
@@ -300,6 +326,12 @@ app.patch('/api/areas/:id', auth, async (req, res) => {
   try {
     const id = req.params.id;
     const { status, assignedTo, notes, cleaningStart, cleaningEnd } = req.body;
+    // Fetch current row BEFORE update so we get cleaning_start
+    let prevRow = null;
+    if (cleaningEnd) {
+      const cur = await pool.query('SELECT cleaning_start, assigned_to, name FROM areas WHERE id=$1', [id]);
+      prevRow = cur.rows[0] || null;
+    }
     const parts = [], vals = [];
     let n = 1;
     if (status        !== undefined) { parts.push(`status=$${n++}`);         vals.push(status); }
@@ -310,6 +342,16 @@ app.patch('/api/areas/:id', auth, async (req, res) => {
     if (!parts.length) return res.status(400).json({ error: 'Nothing to update' });
     vals.push(id);
     await pool.query(`UPDATE areas SET ${parts.join(',')} WHERE id=$${n}`, vals);
+    // Log completed cleaning session
+    if (cleaningEnd) {
+      const start    = prevRow?.cleaning_start ? Number(prevRow.cleaning_start) : null;
+      const who      = prevRow?.assigned_to || assignedTo || req.user.id;
+      const areaName = prevRow?.name || id;
+      await pool.query(
+        'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [uid(), 'area', id, areaName, who, start, cleaningEnd, start ? cleaningEnd - start : null]
+      );
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('Area update error:', e);
@@ -441,6 +483,55 @@ app.delete('/api/users/:id', auth, requireRole('admin'), async (req, res) => {
     await pool.query('DELETE FROM users WHERE id=$1', [id]);
     res.json({ ok: true });
   } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── HISTORY ─────────────────────────────────────────────
+// GET /api/history?date=YYYY-MM-DD  (defaults to today)
+app.get('/api/history', auth, async (req, res) => {
+  try {
+    // Parse requested date (UTC day boundaries)
+    const dateStr = req.query.date || new Date().toISOString().slice(0, 10);
+    const dayStart = new Date(dateStr + 'T00:00:00.000Z').getTime();
+    const dayEnd   = new Date(dateStr + 'T23:59:59.999Z').getTime();
+
+    // Cleaning logs for the day
+    const logsRes = await pool.query(
+      'SELECT l.*, u.name AS cleaner_name FROM cleaning_logs l LEFT JOIN users u ON u.id = l.cleaned_by WHERE l.ended_at >= $1 AND l.ended_at <= $2 ORDER BY l.ended_at',
+      [dayStart, dayEnd]
+    );
+
+    // Photos uploaded that day
+    const photosRes = await pool.query(
+      'SELECT p.*, u.name AS uploader_name FROM photos p LEFT JOIN users u ON u.id = p.uploaded_by WHERE p.uploaded_at >= $1 AND p.uploaded_at <= $2 ORDER BY p.uploaded_at',
+      [dayStart, dayEnd]
+    );
+
+    const logs = logsRes.rows.map(l => ({
+      id:          l.id,
+      itemType:    l.item_type,
+      itemId:      l.item_id,
+      itemName:    l.item_name,
+      cleanedBy:   l.cleaner_name || l.cleaned_by,
+      startedAt:   l.started_at ? Number(l.started_at) : null,
+      endedAt:     Number(l.ended_at),
+      durationMs:  l.duration_ms ? Number(l.duration_ms) : null,
+    }));
+
+    const photos = photosRes.rows.map(p => ({
+      id:         p.id,
+      itemType:   p.item_type,
+      itemId:     p.item_id,
+      data:       p.data,
+      caption:    p.caption || '',
+      uploadedBy: p.uploader_name || p.uploaded_by,
+      uploadedAt: p.uploaded_at ? Number(p.uploaded_at) : null,
+    }));
+
+    res.json({ date: dateStr, logs, photos });
+  } catch (e) {
+    console.error('History error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 });
