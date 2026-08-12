@@ -140,18 +140,16 @@ async function initDB() {
       );
     `);
 
-    // Seed users if empty
-    const { rowCount: uc } = await client.query('SELECT 1 FROM users LIMIT 1');
-    if (uc === 0) {
-      for (const u of DEFAULT_USERS) {
-        const hash = await bcrypt.hash(u.password, 10);
-        await client.query(
-          'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
-          [u.id, u.username, hash, u.name, u.role]
-        );
-      }
-      console.log('✅ Seeded default users');
+    // Seed / restore default users — always upsert passwords so bcrypt hashes are always valid
+    for (const u of DEFAULT_USERS) {
+      const hash = await bcrypt.hash(u.password, 10);
+      await client.query(
+        `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password, username=EXCLUDED.username, name=EXCLUDED.name, role=EXCLUDED.role`,
+        [u.id, u.username, hash, u.name, u.role]
+      );
     }
+    console.log('✅ Default users synced');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
