@@ -910,7 +910,8 @@ async function doAssign(id, userId, checked) {
     const updatedItem = findItem(id);
     const names = getAssignedNames(updatedItem);
     toast(names ? `${itemName(updatedItem)} → ${names}` : `${itemName(updatedItem)} unassigned`, 'info');
-    if (currentItemId !== null) openItemModal(id); else renderView();
+    renderView(); // always refresh overview cards
+    if (currentItemId !== null) openItemModal(id);
   } catch(e) { toast(e.message,'error'); }
 }
 
