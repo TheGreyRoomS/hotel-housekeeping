@@ -19,7 +19,20 @@ const pool = new Pool({
 
 // ── MIDDLEWARE ──────────────────────────────────────────
 app.use(express.json({ limit: '50mb' })); // allow large base64 photos
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    const name = path.basename(filePath);
+    // The service worker and the shell must never be served stale, or
+    // installed devices keep running an old build.
+    if (name === 'sw.js' || name === 'index.html' || name === 'manifest.json') {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else if (filePath.includes(`${path.sep}icons${path.sep}`)) {
+      // A day, not a week: icons rarely change, but when they do a week is
+      // a long time to have half the phones showing the old tile.
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+  },
+}));
 
 // ── AUTH MIDDLEWARE ─────────────────────────────────────
 function auth(req, res, next) {
