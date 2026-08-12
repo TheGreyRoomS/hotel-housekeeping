@@ -247,6 +247,13 @@ tbody tr:hover td{background:#f8fafc;}
 .ac-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:6px;}
 .ac-name{font-size:15px;font-weight:800;line-height:1.3;}
 
+/* ASSIGN CHECKBOXES */
+.assign-hk-list{display:flex;flex-direction:column;gap:2px;}
+.assign-hk-item{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;
+  padding:5px 6px;border-radius:6px;transition:background .1s;}
+.assign-hk-item:hover{background:var(--bg);}
+.assign-hk-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--primary);}
+
 /* EMPTY */
 .empty{text-align:center;padding:48px 24px;color:var(--muted);}
 .empty .ei{font-size:48px;margin-bottom:14px;}
@@ -423,6 +430,13 @@ function getPhotos(item) { return isAreaId(item.id) ? (item.photos || []) : (ite
 function getUserName(id) { const u = state.users.find(u => u.id === id); return u ? u.name : '—'; }
 function getHKs() { return state.users.filter(u => u.role === 'housekeeper'); }
 
+// Returns comma-separated names of all assigned housekeepers, or null if none
+function getAssignedNames(item) {
+  const ids = item.assignedTo || [];
+  if (!ids.length) return null;
+  return ids.map(id => getUserName(id)).join(', ');
+}
+
 function isReception() { return currentUser && (currentUser.role === 'reception' || currentUser.role === 'admin'); }
 function isMaint()     { return currentUser && currentUser.role === 'maintenance'; }
 function isAdmin()     { return currentUser && currentUser.role === 'admin'; }
@@ -535,11 +549,9 @@ function renderView() {
 
 function refreshOpenModal() {
   if (currentItemId !== null) {
-    // quietly refresh modal data without re-opening (avoids scroll jump)
     const item = findItem(currentItemId);
     if (item) openItemModal(currentItemId);
   } else {
-    // just re-render current view
     renderView();
   }
 }
@@ -574,10 +586,10 @@ function renderOverview() {
 }
 
 function cardHTML(item) {
-  const ia   = isAreaId(item.id);
-  const hk   = item.assignedTo ? getUserName(item.assignedTo) : null;
-  const pics = getPhotos(item).length;
-  const iss  = item.maintenanceIssues.filter(i => i.status !== 'resolved').length;
+  const ia    = isAreaId(item.id);
+  const names = getAssignedNames(item);
+  const pics  = getPhotos(item).length;
+  const iss   = item.maintenanceIssues.filter(i => i.status !== 'resolved').length;
   const active = item.status === 'cleaning' && item.cleaningStart;
   const dur = active ? formatDur(Date.now() - item.cleaningStart)
     : (item.cleaningStart && item.cleaningEnd ? formatDur(item.cleaningEnd - item.cleaningStart) : null);
@@ -589,7 +601,7 @@ function cardHTML(item) {
         <div class="sbadge sb-${item.status}">${STATUS_LABEL[item.status]}</div>
       </div>
       <div class="ic-body">
-        ${hk ? `<div class="ic-info"><span>🧹</span>${hk}</div>` : '<div class="ic-info" style="color:#cbd5e1">Unassigned</div>'}
+        ${names ? `<div class="ic-info"><span>🧹</span>${names}</div>` : '<div class="ic-info" style="color:#cbd5e1">Unassigned</div>'}
         ${dur ? `<div class="ic-info"><span>⏱</span><span class="live-dur" data-rid="${item.id}">${dur}</span></div>` : ''}
         ${pics ? `<div class="ic-info"><span>📷</span>${pics} photo${pics>1?'s':''}</div>` : ''}
         ${iss  ? `<div class="ic-info" style="color:var(--cleaning)"><span>🔧</span>${iss} issue${iss>1?'s':''}</div>` : ''}
@@ -603,20 +615,24 @@ function renderAssignments() {
   const card = item => {
     const ia  = isAreaId(item.id);
     const did = ia ? `'${item.id}'` : item.id;
+    const names = getAssignedNames(item);
     return `
       <div class="assign-card${ia?' area-ac':''}">
         <div class="ac-top">
           <div class="ac-name">${ia ? `${item.icon} ${item.name}` : `Room ${item.id}`}</div>
           <div class="sbadge sb-${item.status}">${STATUS_LABEL[item.status]}</div>
         </div>
-        <div class="fg" style="margin-bottom:0">
-          <label style="font-size:12px;margin-bottom:4px;display:block">Housekeeper</label>
-          <select onchange="doAssign(${did},this.value)" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;">
-            <option value="">— Unassigned —</option>
-            ${hks.map(h => `<option value="${h.id}"${item.assignedTo===h.id?' selected':''}>${h.name}</option>`).join('')}
-          </select>
+        <div class="sec-lbl" style="margin-bottom:6px">Housekeepers</div>
+        <div class="assign-hk-list">
+          ${hks.length ? hks.map(h => `
+            <label class="assign-hk-item">
+              <input type="checkbox" ${(item.assignedTo||[]).includes(h.id)?'checked':''}
+                onchange="doAssign(${did},'${h.id}',this.checked)">
+              <span>${h.name}</span>
+            </label>
+          `).join('') : '<div style="font-size:12px;color:var(--muted)">No housekeepers</div>'}
         </div>
-        ${item.assignedTo ? `<div style="font-size:12px;color:var(--muted);margin-top:6px">✓ ${getUserName(item.assignedTo)}</div>` : ''}
+        ${names ? `<div style="font-size:12px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">✓ ${names}</div>` : ''}
       </div>`;
   };
   return `
@@ -628,8 +644,9 @@ function renderAssignments() {
 }
 
 function renderHKView() {
-  const myRooms = state.rooms.filter(r => r.assignedTo === currentUser.id);
-  const myAreas = state.areas.filter(a => a.assignedTo === currentUser.id);
+  // Now assignedTo is an array — check inclusion
+  const myRooms = state.rooms.filter(r => (r.assignedTo||[]).includes(currentUser.id));
+  const myAreas = state.areas.filter(a => (a.assignedTo||[]).includes(currentUser.id));
   const total = myRooms.length + myAreas.length;
   if (!total) return `
     <div class="pg-hdr"><div class="pg-title">My Work</div></div>
@@ -693,9 +710,9 @@ function renderAllSpaces() {
       ${['dirty','cleaning','inspection','clean'].map(s=>`<div class="stat-card sc-${s}"><div class="stat-val">${cnt(s)}</div><div class="stat-lbl">${STATUS_LABEL[s]}</div></div>`).join('')}
     </div>
     <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms</div><div class="sec-div-line"></div></div>
-    <div class="cards-grid">${state.rooms.map(r=>`<div class="item-card s-${r.status}" style="cursor:default"><div class="ic-top"><div class="ic-name">Room ${r.id}</div><div class="sbadge sb-${r.status}">${STATUS_LABEL[r.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${r.assignedTo?getUserName(r.assignedTo):'Unassigned'}</div></div><div class="ic-bar s-${r.status}"></div></div>`).join('')}</div>
+    <div class="cards-grid">${state.rooms.map(r=>`<div class="item-card s-${r.status}" style="cursor:default"><div class="ic-top"><div class="ic-name">Room ${r.id}</div><div class="sbadge sb-${r.status}">${STATUS_LABEL[r.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${getAssignedNames(r)||'Unassigned'}</div></div><div class="ic-bar s-${r.status}"></div></div>`).join('')}</div>
     <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Areas</div><div class="sec-div-line"></div></div>
-    <div class="cards-grid">${state.areas.map(a=>`<div class="item-card s-${a.status} area-card" style="cursor:default"><div class="ic-top"><div class="ic-name area-name">${a.icon} ${a.name}</div><div class="sbadge sb-${a.status}">${STATUS_LABEL[a.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${a.assignedTo?getUserName(a.assignedTo):'Unassigned'}</div></div><div class="ic-bar s-${a.status}"></div></div>`).join('')}</div>`;
+    <div class="cards-grid">${state.areas.map(a=>`<div class="item-card s-${a.status} area-card" style="cursor:default"><div class="ic-top"><div class="ic-name area-name">${a.icon} ${a.name}</div><div class="sbadge sb-${a.status}">${STATUS_LABEL[a.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${getAssignedNames(a)||'Unassigned'}</div></div><div class="ic-bar s-${a.status}"></div></div>`).join('')}`;
 }
 
 function renderIssues() {
@@ -705,7 +722,10 @@ function renderIssues() {
   const filtered = issueFilter==='all' ? all : all.filter(i=>i.status!=='resolved');
   const open = all.filter(i=>i.status!=='resolved').length;
   return `
-    <div class="pg-hdr"><div><div class="pg-title">Maintenance Issues</div><div class="pg-sub">${open} open</div></div></div>
+    <div class="pg-hdr">
+      <div><div class="pg-title">Maintenance Issues</div><div class="pg-sub">${open} open</div></div>
+      <button class="btn btn-warn" onclick="openAddIssueGlobal()">+ Add Issue</button>
+    </div>
     <div class="filter-row">
       <div class="filt${issueFilter==='open'?' active':''}" onclick="setFilter('open')">Open (${open})</div>
       <div class="filt${issueFilter==='all'?' active':''}" onclick="setFilter('all')">All (${all.length})</div>
@@ -795,11 +815,16 @@ function openItemModal(id) {
             </div>
           </div>
           <div class="msec">
-            <div class="sec-lbl">Housekeeper</div>
-            <select onchange="doAssign(${did},this.value)" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:14px;">
-              <option value="">— Unassigned —</option>
-              ${hks.map(h=>`<option value="${h.id}"${item.assignedTo===h.id?' selected':''}>${h.name}</option>`).join('')}
-            </select>
+            <div class="sec-lbl">Housekeepers</div>
+            <div class="assign-hk-list">
+              ${hks.length ? hks.map(h=>`
+                <label class="assign-hk-item">
+                  <input type="checkbox" ${(item.assignedTo||[]).includes(h.id)?'checked':''}
+                    onchange="doAssign(${did},'${h.id}',this.checked)">
+                  <span>${h.name}</span>
+                </label>
+              `).join('') : '<div style="font-size:12px;color:var(--muted)">No housekeepers</div>'}
+            </div>
           </div>` : ''}
           ${dur||active ? `
           <div class="msec">
@@ -807,7 +832,7 @@ function openItemModal(id) {
             <div class="timer-box">
               <div class="timer-val"><span class="live-dur" data-rid="${id}">${dur||'00:00:00'}</span></div>
               <div class="timer-sub">${active?'Cleaning in progress':'Completed'}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:3px">${fmtTime(item.cleaningStart)}${item.cleaningEnd?' → '+fmtTime(item.cleaningEnd):'→ now'}${item.assignedTo?' · '+getUserName(item.assignedTo):''}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px">${fmtTime(item.cleaningStart)}${item.cleaningEnd?' → '+fmtTime(item.cleaningEnd):'→ now'}${(item.assignedTo||[]).length?' · '+getAssignedNames(item):''}</div>
             </div>
           </div>` : ''}
           ${isReception() ? `
@@ -869,13 +894,22 @@ async function doRefresh() {
   renderView();
 }
 
-async function doAssign(id, userId) {
+// doAssign now toggles a single user in/out of the assignedTo array
+async function doAssign(id, userId, checked) {
   try {
     const type = isAreaId(id) ? 'areas' : 'rooms';
-    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ assignedTo: userId||null } });
-    await syncState(true);
     const item = findItem(id);
-    toast(userId ? `${itemName(item)} → ${getUserName(userId)}` : `${itemName(item)} unassigned`, 'info');
+    let current = [...(item.assignedTo || [])];
+    if (checked) {
+      if (!current.includes(userId)) current.push(userId);
+    } else {
+      current = current.filter(u => u !== userId);
+    }
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ assignedTo: current } });
+    await syncState(true);
+    const updatedItem = findItem(id);
+    const names = getAssignedNames(updatedItem);
+    toast(names ? `${itemName(updatedItem)} → ${names}` : `${itemName(updatedItem)} unassigned`, 'info');
     if (currentItemId !== null) openItemModal(id); else renderView();
   } catch(e) { toast(e.message,'error'); }
 }
@@ -1013,6 +1047,58 @@ async function doAddIssue(id) {
     toast('Issue reported 🔧','info');
     if (currentItemId !== null) openItemModal(id); else renderView();
   } catch(e) { toast(e.message,'error'); }
+}
+
+// Global add-issue from the Maintenance tab (choose location + describe)
+function openAddIssueGlobal() {
+  const w = document.createElement('div');
+  w.id = 'issue-global-wrapper';
+  const roomOpts = state.rooms.map(r => `<option value="room:${r.id}">Room ${r.id}</option>`).join('');
+  const areaOpts = state.areas.map(a => `<option value="area:${a.id}">${a.icon} ${a.name}</option>`).join('');
+  w.innerHTML = `
+    <div class="overlay" id="issue-g-ov" onclick="if(event.target.id==='issue-g-ov')closeExtra('issue-global-wrapper')">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:440px">
+        <div class="modal-hdr">
+          <div class="modal-title">🔧 Add Maintenance Issue</div>
+          <button class="modal-close" onclick="closeExtra('issue-global-wrapper')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="fg">
+            <label>Location</label>
+            <select id="iss-g-loc">
+              <optgroup label="🛏 Rooms">${roomOpts}</optgroup>
+              <optgroup label="🏞 Areas">${areaOpts}</optgroup>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Description</label>
+            <textarea id="iss-g-desc" placeholder="Describe the maintenance issue…" rows="4"></textarea>
+          </div>
+          <div id="iss-g-err" class="err hidden"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeExtra('issue-global-wrapper')">Cancel</button>
+          <button class="btn btn-warn" onclick="doAddIssueGlobal()">🔧 Submit Issue</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(w);
+  setTimeout(() => { const t=document.getElementById('iss-g-desc'); if(t) t.focus(); }, 50);
+}
+
+async function doAddIssueGlobal() {
+  const locVal = (document.getElementById('iss-g-loc')||{}).value || '';
+  const desc   = (document.getElementById('iss-g-desc')||{}).value?.trim();
+  const errEl  = document.getElementById('iss-g-err');
+  if (!desc) { errEl.textContent='Please describe the issue.'; errEl.classList.remove('hidden'); return; }
+  const [itemType, itemId] = locVal.split(':');
+  try {
+    await api('/api/issues', { method:'POST', body:{ itemType, itemId, description:desc } });
+    await syncState(true);
+    closeExtra('issue-global-wrapper');
+    toast('Issue added 🔧','info');
+    renderView();
+  } catch(e) { errEl.textContent=e.message; errEl.classList.remove('hidden'); }
 }
 
 async function doIssueStatus(id, issueId, status) {
@@ -1155,13 +1241,20 @@ function todayStr() {
 function renderHistoryShell() {
   return `
     <div class="pg-hdr">
-      <div><div class="pg-title">📅 History</div><div class="pg-sub">Cleaning logs & minibar photos by day</div></div>
+      <div><div class="pg-title">📅 History</div><div class="pg-sub">Cleaning logs, minibar photos & maintenance issues by day</div></div>
     </div>
     <div class="hist-date-bar">
       <input type="date" id="hist-date" value="${todayStr()}" max="${todayStr()}" onchange="loadHistory()">
       <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↺ Load</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadAllIssues()">📋 All Issues Log</button>
     </div>
     <div id="hist-content"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
+}
+
+function getItemLabel(itemType, itemId) {
+  if (itemType === 'room') return `Room ${itemId}`;
+  const a = state.areas.find(a => a.id === itemId);
+  return a ? `${a.icon} ${a.name}` : itemId;
 }
 
 async function loadHistory() {
@@ -1173,7 +1266,7 @@ async function loadHistory() {
   cont.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
   try {
     const data = await api(`/api/history?date=${date}`);
-    const { logs, photos } = data;
+    const { logs, photos, resolvedIssues } = data;
 
     // Group photos by item
     const photosByItem = {};
@@ -1182,8 +1275,6 @@ async function loadHistory() {
       if (!photosByItem[key]) photosByItem[key] = [];
       photosByItem[key].push(p);
     });
-
-    // All item keys that have photos
     const photoKeys = Object.keys(photosByItem);
 
     let html = '';
@@ -1210,6 +1301,28 @@ async function loadHistory() {
     }
     html += '</div>';
 
+    // ── Resolved Maintenance Issues ──
+    html += `<div class="hist-section">
+      <div class="hist-section-hdr">🔧 Maintenance Issues Resolved (${resolvedIssues.length})</div>`;
+    if (!resolvedIssues.length) {
+      html += '<div class="hist-log-row" style="color:var(--muted);font-style:italic">No issues resolved this day.</div>';
+    } else {
+      resolvedIssues.forEach(iss => {
+        const label = getItemLabel(iss.itemType, iss.itemId);
+        const resolvedTime = iss.resolvedAt ? new Date(iss.resolvedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—';
+        html += `
+          <div class="hist-log-row">
+            <div class="hist-item-badge" style="background:var(--clean)">${label.substring(0,10)}</div>
+            <div class="hist-log-body">
+              <div class="hist-log-name">${iss.description}</div>
+              <div class="hist-log-meta">Reported by ${iss.reportedBy||'—'} · Resolved ${resolvedTime}${iss.resolveNote?' · '+iss.resolveNote:''}</div>
+            </div>
+            <span class="ibadge ib-resolved">Resolved</span>
+          </div>`;
+      });
+    }
+    html += '</div>';
+
     // ── Minibar / Area Photos ──
     html += `<div class="hist-section">
       <div class="hist-section-hdr">📷 Photos Uploaded (${photos.length})</div>`;
@@ -1217,7 +1330,6 @@ async function loadHistory() {
       html += '<div class="hist-log-row" style="color:var(--muted);font-style:italic">No photos uploaded this day.</div>';
       html += '</div>';
     } else {
-      // Group by item for a cleaner display
       photoKeys.forEach(key => {
         const ps = photosByItem[key];
         const [type, id] = key.split(':');
@@ -1236,6 +1348,40 @@ async function loadHistory() {
       html += '</div>';
     }
 
+    cont.innerHTML = html;
+  } catch(e) {
+    cont.innerHTML = `<div class="empty"><div class="ei">⚠️</div><p>${e.message}</p></div>`;
+  }
+}
+
+// Full issue log (all time, not date-filtered)
+async function loadAllIssues() {
+  const cont = document.getElementById('hist-content');
+  if (!cont) return;
+  cont.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  try {
+    const data = await api(`/api/history?date=${todayStr()}`);
+    const { allIssues } = data;
+    if (!allIssues || !allIssues.length) {
+      cont.innerHTML = '<div class="empty"><div class="ei">✅</div><p>No maintenance issues on record.</p></div>';
+      return;
+    }
+    let html = `<div class="hist-section">
+      <div class="hist-section-hdr">🔧 All Maintenance Issues (${allIssues.length})</div>`;
+    allIssues.forEach(iss => {
+      const label = getItemLabel(iss.itemType, iss.itemId);
+      html += `
+        <div class="hist-log-row" style="align-items:flex-start;padding:12px 16px">
+          <div class="hist-item-badge" style="background:${iss.status==='resolved'?'var(--clean)':iss.status==='in_progress'?'#3b82f6':'var(--cleaning)'}">${label.substring(0,10)}</div>
+          <div class="hist-log-body">
+            <div class="hist-log-name">${iss.description}</div>
+            <div class="hist-log-meta">${label} · Reported by ${iss.reportedBy||'—'} · ${fmtDate(iss.reportedAt)}</div>
+            ${iss.status==='resolved'?`<div class="hist-log-meta" style="color:var(--clean)">✓ Resolved ${fmtDate(iss.resolvedAt)}${iss.resolveNote?' — '+iss.resolveNote:''}</div>`:''}
+          </div>
+          <span class="ibadge ib-${iss.status}" style="margin-top:2px">${iss.status==='open'?'Open':iss.status==='in_progress'?'In Progress':'Resolved'}</span>
+        </div>`;
+    });
+    html += '</div>';
     cont.innerHTML = html;
   } catch(e) {
     cont.innerHTML = `<div class="empty"><div class="ei">⚠️</div><p>${e.message}</p></div>`;

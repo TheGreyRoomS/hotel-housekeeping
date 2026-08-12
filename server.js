@@ -57,7 +57,7 @@ const AREAS_META = [
   { id: 'a11', name: 'Windows',             icon: '🪟', linked_room: null },
   { id: 'a12', name: 'Courtyard Stairs',    icon: '🪜', linked_room: null },
   { id: 'a13', name: 'Fountain',            icon: '⛲', linked_room: null },
-  { id: 'a14', name: 'Water Plants',       icon: '💧', linked_room: null },
+  { id: 'a14', name: 'Water Plants',        icon: '💧', linked_room: null },
   { id: 'a15', name: 'Water Plants Rm 3&4 Terrace', icon: '🌱', linked_room: null },
 ];
 
@@ -185,6 +185,17 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+// Parse assigned_to — stored as JSON array string, but handle legacy single-ID strings
+function parseAssignedTo(val) {
+  if (!val) return [];
+  try {
+    const p = JSON.parse(val);
+    return Array.isArray(p) ? p : [p];
+  } catch {
+    return val ? [val] : [];
+  }
+}
+
 function mapPhoto(p) {
   return {
     id: p.id, data: p.data,
@@ -217,7 +228,7 @@ async function getFullState() {
   const rooms = roomsRes.rows.map(r => ({
     id:            r.id,
     status:        r.status,
-    assignedTo:    r.assigned_to || null,
+    assignedTo:    parseAssignedTo(r.assigned_to),
     cleaningStart: r.cleaning_start ? Number(r.cleaning_start) : null,
     cleaningEnd:   r.cleaning_end   ? Number(r.cleaning_end)   : null,
     notes:         r.notes || '',
@@ -231,7 +242,7 @@ async function getFullState() {
     icon:          a.icon,
     linkedRoom:    a.linked_room || null,
     status:        a.status,
-    assignedTo:    a.assigned_to || null,
+    assignedTo:    parseAssignedTo(a.assigned_to),
     cleaningStart: a.cleaning_start ? Number(a.cleaning_start) : null,
     cleaningEnd:   a.cleaning_end   ? Number(a.cleaning_end)   : null,
     notes:         a.notes || '',
@@ -298,7 +309,12 @@ app.patch('/api/rooms/:id', auth, async (req, res) => {
     const parts = [], vals = [];
     let n = 1;
     if (status        !== undefined) { parts.push(`status=$${n++}`);         vals.push(status); }
-    if (assignedTo    !== undefined) { parts.push(`assigned_to=$${n++}`);    vals.push(assignedTo || null); }
+    if (assignedTo    !== undefined) {
+      parts.push(`assigned_to=$${n++}`);
+      // Store array as JSON string; null/empty means unassigned
+      const arr = Array.isArray(assignedTo) ? assignedTo : (assignedTo ? [assignedTo] : []);
+      vals.push(arr.length ? JSON.stringify(arr) : null);
+    }
     if (notes         !== undefined) { parts.push(`notes=$${n++}`);          vals.push(notes); }
     if (cleaningStart !== undefined) { parts.push(`cleaning_start=$${n++}`); vals.push(cleaningStart); }
     if (cleaningEnd   !== undefined) { parts.push(`cleaning_end=$${n++}`);   vals.push(cleaningEnd); }
@@ -308,7 +324,7 @@ app.patch('/api/rooms/:id', auth, async (req, res) => {
     // Log completed cleaning session
     if (cleaningEnd) {
       const start = prevRow?.cleaning_start ? Number(prevRow.cleaning_start) : null;
-      const who   = prevRow?.assigned_to || assignedTo || req.user.id;
+      const who   = req.user.id; // person who triggered the end
       await pool.query(
         'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
         [uid(), 'room', String(id), `Room ${id}`, who, start, cleaningEnd, start ? cleaningEnd - start : null]
@@ -335,7 +351,11 @@ app.patch('/api/areas/:id', auth, async (req, res) => {
     const parts = [], vals = [];
     let n = 1;
     if (status        !== undefined) { parts.push(`status=$${n++}`);         vals.push(status); }
-    if (assignedTo    !== undefined) { parts.push(`assigned_to=$${n++}`);    vals.push(assignedTo || null); }
+    if (assignedTo    !== undefined) {
+      parts.push(`assigned_to=$${n++}`);
+      const arr = Array.isArray(assignedTo) ? assignedTo : (assignedTo ? [assignedTo] : []);
+      vals.push(arr.length ? JSON.stringify(arr) : null);
+    }
     if (notes         !== undefined) { parts.push(`notes=$${n++}`);          vals.push(notes); }
     if (cleaningStart !== undefined) { parts.push(`cleaning_start=$${n++}`); vals.push(cleaningStart); }
     if (cleaningEnd   !== undefined) { parts.push(`cleaning_end=$${n++}`);   vals.push(cleaningEnd); }
@@ -345,7 +365,7 @@ app.patch('/api/areas/:id', auth, async (req, res) => {
     // Log completed cleaning session
     if (cleaningEnd) {
       const start    = prevRow?.cleaning_start ? Number(prevRow.cleaning_start) : null;
-      const who      = prevRow?.assigned_to || assignedTo || req.user.id;
+      const who      = req.user.id; // person who triggered the end
       const areaName = prevRow?.name || id;
       await pool.query(
         'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
@@ -471,6 +491,7 @@ app.patch('/api/users/:id', auth, requireRole('admin'), async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'Username already taken' });
+    console.error('Update user error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -508,6 +529,25 @@ app.get('/api/history', auth, async (req, res) => {
       [dayStart, dayEnd]
     );
 
+    // Maintenance issues resolved that day
+    const resolvedIssuesRes = await pool.query(
+      `SELECT i.*, u.name AS reporter_name
+       FROM issues i
+       LEFT JOIN users u ON u.id = i.reported_by
+       WHERE i.resolved_at >= $1 AND i.resolved_at <= $2
+       ORDER BY i.resolved_at`,
+      [dayStart, dayEnd]
+    );
+
+    // All open issues (for the full issue history list, not date-filtered)
+    const allIssuesRes = await pool.query(
+      `SELECT i.*, u.name AS reporter_name
+       FROM issues i
+       LEFT JOIN users u ON u.id = i.reported_by
+       ORDER BY i.reported_at DESC`,
+      []
+    );
+
     const logs = logsRes.rows.map(l => ({
       id:          l.id,
       itemType:    l.item_type,
@@ -529,7 +569,31 @@ app.get('/api/history', auth, async (req, res) => {
       uploadedAt: p.uploaded_at ? Number(p.uploaded_at) : null,
     }));
 
-    res.json({ date: dateStr, logs, photos });
+    const resolvedIssues = resolvedIssuesRes.rows.map(i => ({
+      id:          i.id,
+      itemType:    i.item_type,
+      itemId:      i.item_id,
+      description: i.description,
+      reportedBy:  i.reporter_name || i.reported_by,
+      reportedAt:  i.reported_at ? Number(i.reported_at) : null,
+      resolvedAt:  i.resolved_at ? Number(i.resolved_at) : null,
+      resolveNote: i.resolve_note || '',
+      status:      i.status,
+    }));
+
+    const allIssues = allIssuesRes.rows.map(i => ({
+      id:          i.id,
+      itemType:    i.item_type,
+      itemId:      i.item_id,
+      description: i.description,
+      reportedBy:  i.reporter_name || i.reported_by,
+      reportedAt:  i.reported_at ? Number(i.reported_at) : null,
+      resolvedAt:  i.resolved_at ? Number(i.resolved_at) : null,
+      resolveNote: i.resolve_note || '',
+      status:      i.status,
+    }));
+
+    res.json({ date: dateStr, logs, photos, resolvedIssues, allIssues });
   } catch (e) {
     console.error('History error:', e);
     res.status(500).json({ error: 'Server error' });
