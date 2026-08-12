@@ -3,7 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hotel Housekeeping</title>
+<title>TGHHousekeeping APP</title>
+
+<!-- ── PWA ─────────────────────────────────────────────── -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f4c75">
+<meta name="description" content="Housekeeping and maintenance management for The Grey Hotel.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="TGH Housekeeping">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 :root{
@@ -276,6 +289,26 @@ tbody tr:hover td{background:#f8fafc;}
 .hist-photo-wrap img:hover{border-color:var(--primary);}
 .hist-photo-meta{font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
+/* PWA INSTALL */
+.login-logo img{width:74px;height:auto;display:block;margin:0 auto;}
+.h-logo{width:22px;height:22px;vertical-align:-5px;}
+#install-btn{position:fixed;left:16px;bottom:16px;z-index:150;display:none;
+  align-items:center;gap:8px;background:var(--primary);color:#fff;border:0;cursor:pointer;
+  font-size:14px;font-weight:600;padding:12px 18px;border-radius:999px;box-shadow:var(--sh-lg);
+  font-family:inherit;}
+#install-btn:hover{background:var(--primary-h);}
+#install-btn.show{display:flex;}
+#ios-hint{background:#f8fafc;border:1px solid var(--border);border-radius:var(--r);
+  padding:11px 13px;margin-top:14px;font-size:12px;color:var(--muted);line-height:1.5;display:none;}
+#ios-hint.show{display:block;}
+#ios-hint strong{color:var(--text);}
+#update-bar{position:fixed;left:0;right:0;bottom:0;z-index:150;display:none;
+  align-items:center;justify-content:center;gap:14px;background:var(--text);color:#fff;
+  padding:11px 16px;font-size:13px;}
+#update-bar.show{display:flex;}
+#update-bar button{background:var(--accent);color:#06281f;border:0;border-radius:6px;
+  padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+
 /* LOADING OVERLAY */
 #loading-screen{position:fixed;inset:0;background:rgba(255,255,255,.85);
   display:flex;align-items:center;justify-content:center;z-index:600;font-size:15px;color:var(--muted);}
@@ -303,9 +336,9 @@ tbody tr:hover td{background:#f8fafc;}
 <div id="login-page">
   <div class="login-box">
     <div class="login-logo">
-      <div class="hi">🏨</div>
-      <h1>Boutique Hotel</h1>
-      <p>Housekeeping Management</p>
+      <img src="/icons/logo.png" alt="The Grey Hotel" width="74">
+      <h1>Housekeeping APP</h1>
+      <p>The Grey Hotel</p>
     </div>
     <div class="fg"><label>Username</label><input id="l-user" type="text" placeholder="Enter username" autocomplete="username"></div>
     <div class="fg"><label>Password</label><input id="l-pass" type="password" placeholder="Enter password" autocomplete="current-password"></div>
@@ -320,13 +353,19 @@ tbody tr:hover td{background:#f8fafc;}
         <tr><td>🔧 maintenance</td><td>pass123</td></tr>
       </table>
     </div>
+    <div id="ios-hint">
+      <strong>Add to your Home Screen</strong><br>
+      Tap the <strong>Share</strong> button at the bottom of Safari (the square with an
+      arrow pointing up), then choose <strong>Add to Home Screen</strong> to use this
+      like a normal app.
+    </div>
   </div>
 </div>
 
 <!-- APP -->
 <div id="app-shell" class="hidden">
   <header id="app-header">
-    <div class="h-brand">🏨 <span>Housekeeping</span></div>
+    <div class="h-brand"><img src="/icons/logo-white.png" alt="" class="h-logo"> <span>Housekeeping</span></div>
     <div class="h-right">
       <div class="sync-dot" id="sync-dot" title="Sync status"></div>
       <span id="h-name" class="h-name"></span>
@@ -456,6 +495,90 @@ function loading(on) { document.getElementById('loading-screen').classList.toggl
 // ═══════════════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════════════
+/* ── Session persistence ──────────────────────────────────
+ * The installed app gets killed in the background all the time (iOS is
+ * especially aggressive), so the token is kept in localStorage instead of
+ * only in memory. The JWT still expires server-side after 12h, so a stored
+ * session lapses on its own after roughly one shift, and api() drops the
+ * user back to the login screen the moment the server rejects it.
+ */
+const SESSION_KEY = 'tgh-hk-session';
+
+/* Only the token is stored. The name and role are read back out of the
+ * token itself rather than saved alongside it, so an edited localStorage
+ * entry can't hand someone an admin-looking menu, and a stored session
+ * from an older build can't feed half-built objects into the UI. */
+function saveSession() {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ token }));
+  } catch (e) { /* private mode / storage full — just don't persist */ }
+}
+
+// Read the JWT payload. Signature isn't checked here — the server does that
+// on every request — but the payload can't be edited without invalidating it.
+function decodeToken(t) {
+  try {
+    const part = String(t).split('.')[1];
+    if (!part) return null;
+    const bytes = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+    const json = decodeURIComponent(bytes.split('').map(
+      (c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    const p = JSON.parse(json);
+    if (!p || !p.id || !p.role || !p.name) return null;
+    if (p.exp && p.exp * 1000 <= Date.now()) return null; // already lapsed
+    return { id: p.id, name: p.name, role: p.role, username: p.username };
+  } catch (e) { return null; }
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+}
+
+function loadSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
+  catch (e) { return null; }
+}
+
+async function restoreSession() {
+  const saved = loadSession();
+  if (!saved || !saved.token) return;
+
+  const user = decodeToken(saved.token);
+  if (!user) { clearSession(); return; } // missing, malformed or already expired
+
+  const errEl = document.getElementById('l-err');
+  token       = saved.token;
+  currentUser = user;
+
+  try {
+    loading(true);
+    const ok = await syncState(true); // silent: no toast behind the login screen
+    loading(false);
+
+    if (ok) { showApp(); return; }
+
+    if (!token) {
+      // api() saw a 401 and already logged us out and cleared storage.
+      errEl.textContent = 'Your session has expired — please sign in again.';
+    } else {
+      // Network problem, not a bad token. Keep the session for the next launch.
+      errEl.textContent = "Couldn't reach the server — check your connection.";
+    }
+    errEl.classList.remove('hidden');
+  } catch (e) {
+    // Never let a bad stored session strand someone on a broken screen
+    // with no way back to the login form.
+    console.warn('Session restore failed:', e);
+    loading(false);
+    clearSession();
+    token = null; currentUser = null;
+    document.getElementById('app-shell').classList.add('hidden');
+    document.getElementById('login-page').classList.remove('hidden');
+    errEl.textContent = 'Please sign in again.';
+    errEl.classList.remove('hidden');
+  }
+}
+
 async function doLogin() {
   const username = document.getElementById('l-user').value.trim();
   const password = document.getElementById('l-pass').value;
@@ -467,6 +590,7 @@ async function doLogin() {
     const data = await api('/api/login', { method: 'POST', body: { username, password } });
     token       = data.token;
     currentUser = data.user;
+    saveSession();
     loading(true);
     await syncState();
     loading(false);
@@ -481,6 +605,7 @@ async function doLogin() {
 
 function doLogout() {
   token = null; currentUser = null;
+  clearSession();
   clearInterval(timerInterval); clearInterval(pollInterval);
   document.getElementById('app-shell').classList.add('hidden');
   document.getElementById('login-page').classList.remove('hidden');
@@ -1402,6 +1527,97 @@ function toast(msg, type='info') {
   setTimeout(() => t.style.opacity='0', 3200);
   setTimeout(() => t.remove(), 3500);
 }
+
+// Sign the user straight back in if they still have a valid session.
+restoreSession();
+</script>
+
+<!-- ── PWA: install prompt, update banner, service worker ── -->
+<button id="install-btn" type="button">⬇️ Install app</button>
+<div id="update-bar">
+  <span>A new version is available.</span>
+  <button type="button" id="update-btn">Update now</button>
+</div>
+
+<script>
+(function () {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+
+  /* ── Install button (Android / Chrome / Edge desktop) ── */
+  const installBtn = document.getElementById('install-btn');
+  let deferredPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone) installBtn.classList.add('show');
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    installBtn.classList.remove('show');
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    installBtn.classList.remove('show');
+  });
+
+  /* ── iOS never fires beforeinstallprompt: show manual steps ── */
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS && !isStandalone) {
+    const hint = document.getElementById('ios-hint');
+    if (hint) hint.classList.add('show');
+  }
+
+  /* ── Service worker ── */
+  if ('serviceWorker' in navigator) {
+    // Only ever reload because the user asked to update. Reloading on any
+    // controllerchange would wipe half-typed forms on first visit.
+    let updateRequested = false;
+
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        const offerUpdate = (sw) => {
+          if (!sw || !navigator.serviceWorker.controller) return;
+          installBtn.classList.remove('show'); // never stack the two bars
+          document.getElementById('update-bar').classList.add('show');
+          document.getElementById('update-btn').onclick = () => {
+            updateRequested = true;
+            sw.postMessage('SKIP_WAITING');
+          };
+        };
+
+        // A new version may already be sitting and waiting.
+        if (reg.waiting) offerUpdate(reg.waiting);
+
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed') offerUpdate(sw);
+          });
+        });
+
+        // Check for a new version each time the app is brought to the front.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update();
+        });
+      }).catch((err) => console.warn('SW registration failed:', err));
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!updateRequested) return;
+        updateRequested = false;
+        window.location.reload();
+      });
+    });
+  }
+})();
 </script>
 </body>
 </html>
