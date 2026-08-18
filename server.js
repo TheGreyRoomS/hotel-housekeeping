@@ -622,6 +622,21 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Manual day-reset endpoint (admin only)
+app.post('/api/admin/reset-day', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await pool.query(`UPDATE rooms SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
+    await pool.query(`UPDATE areas SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
+    await pool.query(`DELETE FROM photos`);
+    await pool.query(`DELETE FROM issues WHERE status != 'resolved'`);
+    console.log('🌅 Manual day reset triggered by', req.user.username);
+    res.json({ ok: true, message: 'Day reset complete' });
+  } catch(e) {
+    console.error('Reset error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── DAILY RESET ─────────────────────────────────────────
 // Runs at 02:00 server time every day.
 // Clears notes, photos, open maintenance issues and resets all rooms/areas to dirty.
