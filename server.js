@@ -229,10 +229,13 @@ function mapIssue(i) {
 }
 
 async function getFullState() {
+  // Photos: only show today's uploads in room/area views — older ones stay in history
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
   const [roomsRes, areasRes, photosRes, issuesRes] = await Promise.all([
     pool.query('SELECT * FROM rooms ORDER BY id'),
     pool.query('SELECT * FROM areas ORDER BY id'),
-    pool.query('SELECT * FROM photos ORDER BY uploaded_at'),
+    pool.query('SELECT * FROM photos WHERE uploaded_at >= $1 AND uploaded_at <= $2 ORDER BY uploaded_at', [todayStart.getTime(), todayEnd.getTime()]),
     pool.query('SELECT * FROM issues ORDER BY reported_at'),
   ]);
 
@@ -623,11 +626,12 @@ app.use((err, req, res, _next) => {
 });
 
 // Manual day-reset endpoint (admin only)
+// Photos are NEVER deleted — they stay in history filtered by date.
+// Only room/area status, notes and timers are cleared.
 app.post('/api/admin/reset-day', auth, requireRole('admin'), async (req, res) => {
   try {
     await pool.query(`UPDATE rooms SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
     await pool.query(`UPDATE areas SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
-    await pool.query(`DELETE FROM photos`);
     await pool.query(`DELETE FROM issues WHERE status != 'resolved'`);
     console.log('🌅 Manual day reset triggered by', req.user.username);
     res.json({ ok: true, message: 'Day reset complete' });
@@ -653,8 +657,8 @@ function scheduleDailyReset() {
     try {
       await pool.query(`UPDATE rooms SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
       await pool.query(`UPDATE areas SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
-      await pool.query(`DELETE FROM photos`);
       await pool.query(`DELETE FROM issues WHERE status != 'resolved'`);
+      // Photos are never deleted — they remain in history filtered by upload date
       console.log('🌅 Daily reset complete — rooms cleared for new day');
     } catch(e) {
       console.error('Daily reset error:', e.message);
