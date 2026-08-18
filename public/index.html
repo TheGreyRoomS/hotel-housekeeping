@@ -289,19 +289,9 @@ tbody tr:hover td{background:#f8fafc;}
 .hist-photo-wrap img:hover{border-color:var(--primary);}
 .hist-photo-meta{font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
-/* PWA INSTALL */
+/* PWA */
 .login-logo img{width:74px;height:auto;display:block;margin:0 auto;}
 .h-logo{width:22px;height:22px;vertical-align:-5px;}
-#install-btn{position:fixed;left:16px;bottom:16px;z-index:150;display:none;
-  align-items:center;gap:8px;background:var(--primary);color:#fff;border:0;cursor:pointer;
-  font-size:14px;font-weight:600;padding:12px 18px;border-radius:999px;box-shadow:var(--sh-lg);
-  font-family:inherit;}
-#install-btn:hover{background:var(--primary-h);}
-#install-btn.show{display:flex;}
-#ios-hint{background:#f8fafc;border:1px solid var(--border);border-radius:var(--r);
-  padding:11px 13px;margin-top:14px;font-size:12px;color:var(--muted);line-height:1.5;display:none;}
-#ios-hint.show{display:block;}
-#ios-hint strong{color:var(--text);}
 #update-bar{position:fixed;left:0;right:0;bottom:0;z-index:150;display:none;
   align-items:center;justify-content:center;gap:14px;background:var(--text);color:#fff;
   padding:11px 16px;font-size:13px;}
@@ -352,12 +342,6 @@ tbody tr:hover td{background:#f8fafc;}
         <tr><td>🧹 hk1 · hk2 · hk3</td><td>pass123</td></tr>
         <tr><td>🔧 maintenance</td><td>pass123</td></tr>
       </table>
-    </div>
-    <div id="ios-hint">
-      <strong>Add to your Home Screen</strong><br>
-      Tap the <strong>Share</strong> button at the bottom of Safari (the square with an
-      arrow pointing up), then choose <strong>Add to Home Screen</strong> to use this
-      like a normal app.
     </div>
   </div>
 </div>
@@ -960,7 +944,7 @@ function openItemModal(id) {
               <div style="font-size:12px;color:var(--muted);margin-top:3px">${fmtTime(item.cleaningStart)}${item.cleaningEnd?' → '+fmtTime(item.cleaningEnd):'→ now'}${(item.assignedTo||[]).length?' · '+getAssignedNames(item):''}</div>
             </div>
           </div>` : ''}
-          ${isReception() ? `
+          ${isReception() || isHK() ? `
           <div class="msec">
             <div class="sec-lbl">Notes</div>
             <textarea id="modal-notes" placeholder="Add notes…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px">${item.notes||''}</textarea>
@@ -1532,8 +1516,10 @@ function toast(msg, type='info') {
 restoreSession();
 </script>
 
-<!-- ── PWA: install prompt, update banner, service worker ── -->
-<button id="install-btn" type="button">⬇️ Install app</button>
+<!-- ── PWA: update banner + service worker ── -->
+<!-- Staff use this from a browser tab, so nothing here advertises installing.
+     The manifest and icons are still served, so anyone who wants a home-screen
+     icon can still add one from their browser's own menu. -->
 <div id="update-bar">
   <span>A new version is available.</span>
   <button type="button" id="update-btn">Update now</button>
@@ -1541,40 +1527,6 @@ restoreSession();
 
 <script>
 (function () {
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
-
-  /* ── Install button (Android / Chrome / Edge desktop) ── */
-  const installBtn = document.getElementById('install-btn');
-  let deferredPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    if (!isStandalone) installBtn.classList.add('show');
-  });
-
-  installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    installBtn.classList.remove('show');
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    deferredPrompt = null;
-  });
-
-  window.addEventListener('appinstalled', () => {
-    deferredPrompt = null;
-    installBtn.classList.remove('show');
-  });
-
-  /* ── iOS never fires beforeinstallprompt: show manual steps ── */
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  if (isIOS && !isStandalone) {
-    const hint = document.getElementById('ios-hint');
-    if (hint) hint.classList.add('show');
-  }
-
   /* ── Service worker ── */
   if ('serviceWorker' in navigator) {
     // Only ever reload because the user asked to update. Reloading on any
@@ -1585,7 +1537,6 @@ restoreSession();
       navigator.serviceWorker.register('/sw.js').then((reg) => {
         const offerUpdate = (sw) => {
           if (!sw || !navigator.serviceWorker.controller) return;
-          installBtn.classList.remove('show'); // never stack the two bars
           document.getElementById('update-bar').classList.add('show');
           document.getElementById('update-btn').onclick = () => {
             updateRequested = true;
