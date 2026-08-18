@@ -153,12 +153,12 @@ async function initDB() {
       );
     `);
 
-    // Seed / restore default users — always upsert passwords so bcrypt hashes are always valid
+    // Ensure default users exist — only insert if missing, never overwrite custom names/usernames
     for (const u of DEFAULT_USERS) {
       const hash = await bcrypt.hash(u.password, 10);
       await client.query(
         `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password, username=EXCLUDED.username, name=EXCLUDED.name, role=EXCLUDED.role`,
+         ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password`,
         [u.id, u.username, hash, u.name, u.role]
       );
     }
@@ -622,9 +622,37 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ── DAILY RESET ─────────────────────────────────────────
+// Runs at 02:00 server time every day.
+// Clears notes, photos, open maintenance issues and resets all rooms/areas to dirty.
+// History remains intact (photos/issues are stored by date and visible in History tab).
+function scheduleDailyReset() {
+  function msUntil2AM() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(2, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+  }
+  setTimeout(async function run() {
+    try {
+      await pool.query(`UPDATE rooms SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
+      await pool.query(`UPDATE areas SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
+      await pool.query(`DELETE FROM photos`);
+      await pool.query(`DELETE FROM issues WHERE status != 'resolved'`);
+      console.log('🌅 Daily reset complete — rooms cleared for new day');
+    } catch(e) {
+      console.error('Daily reset error:', e.message);
+    }
+    setTimeout(run, 24 * 60 * 60 * 1000); // repeat every 24h
+  }, msUntil2AM());
+  console.log(`⏰ Daily reset scheduled`);
+}
+
 // ── START ───────────────────────────────────────────────
 initDB()
   .then(() => {
+    scheduleDailyReset();
     app.listen(PORT, () => {
       console.log(`🏨 Hotel Housekeeping running → http://localhost:${PORT}`);
     });

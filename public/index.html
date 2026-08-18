@@ -803,6 +803,9 @@ function hkCard(item) {
           ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.data}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
           <div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>
         </div>
+        <div class="sec-lbl" style="margin-top:14px">📝 Notes</div>
+        <textarea id="hk-notes-${sid}" placeholder="Add notes…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px;box-sizing:border-box">${item.notes||''}</textarea>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doHKNotes(${did},'${sid}')">Save Notes</button>
         <div class="sec-lbl" style="margin-top:14px">🔧 Issues</div>
         <div>${item.maintenanceIssues.length ? item.maintenanceIssues.map(iss=>issueHTML(iss,false,item.id)).join('') : '<div style="font-size:13px;color:var(--muted);margin-bottom:8px">None reported.</div>'}</div>
         <button class="btn btn-warn btn-sm" onclick="openAddIssue(${did})">+ Report Issue</button>
@@ -1063,6 +1066,17 @@ async function doNotes(id) {
     const notes = document.getElementById('modal-notes').value;
     const type  = isAreaId(id) ? 'areas' : 'rooms';
     await api(`/api/${type}/${id}`, { method:'PATCH', body:{ notes } });
+    toast('Notes saved','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// HK notes save (from hkCard expanded section)
+async function doHKNotes(id, sid) {
+  try {
+    const notes = document.getElementById(`hk-notes-${sid}`).value;
+    const type  = isAreaId(id) ? 'areas' : 'rooms';
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ notes } });
+    await syncState(true);
     toast('Notes saved','success');
   } catch(e) { toast(e.message,'error'); }
 }
