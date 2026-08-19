@@ -630,8 +630,8 @@ app.use((err, req, res, _next) => {
 // Only room/area status, notes and timers are cleared.
 app.post('/api/admin/reset-day', auth, requireRole('admin'), async (req, res) => {
   try {
-    await pool.query(`UPDATE rooms SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
-    await pool.query(`UPDATE areas SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
+    await pool.query(`UPDATE rooms SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
+    await pool.query(`UPDATE areas SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
     console.log('🌅 Manual day reset triggered by', req.user.username);
     res.json({ ok: true, message: 'Day reset complete' });
   } catch(e) {
@@ -654,8 +654,8 @@ function scheduleDailyReset() {
   }
   setTimeout(async function run() {
     try {
-      await pool.query(`UPDATE rooms SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
-      await pool.query(`UPDATE areas SET status='dirty', notes='', cleaning_start=NULL, cleaning_end=NULL`);
+      await pool.query(`UPDATE rooms SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
+      await pool.query(`UPDATE areas SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
       // Photos never deleted — remain in history filtered by upload date
       // Open issues stay open until manually resolved by staff
       console.log('🌅 Daily reset complete — rooms cleared for new day');
