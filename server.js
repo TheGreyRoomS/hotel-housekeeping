@@ -153,20 +153,17 @@ async function initDB() {
       );
     `);
 
-    // Force-reset all default passwords on every startup (prevents hash corruption after redeploy)
-    // Reset passwords by USERNAME (not id) so it works regardless of what's in the DB
+        // Restore default users cleanly — delete any conflicting rows first to fix DB inconsistencies
     for (const u of DEFAULT_USERS) {
       const hash = await bcrypt.hash(u.password, 10);
-      // Update by username first (handles any existing user with this username)
-      await client.query('UPDATE users SET password=$1 WHERE username=$2', [hash, u.username]);
-      // Insert if username doesn't exist yet
+      // Remove any rows with this id OR this username (clears PK/unique conflicts)
+      await client.query('DELETE FROM users WHERE id=$1 OR username=$2', [u.id, u.username]);
       await client.query(
-        `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (username) DO UPDATE SET password=EXCLUDED.password`,
+        'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)',
         [u.id, u.username, hash, u.name, u.role]
       );
     }
-    console.log('✅ Default user passwords reset by username');
+    console.log('✅ Default users restored');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
