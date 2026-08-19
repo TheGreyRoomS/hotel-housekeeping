@@ -153,17 +153,24 @@ async function initDB() {
       );
     `);
 
-        // Restore default users cleanly — delete any conflicting rows first to fix DB inconsistencies
+        // Seed default users — only INSERT if they don't exist; never delete, never overwrite names or passwords
     for (const u of DEFAULT_USERS) {
       const hash = await bcrypt.hash(u.password, 10);
-      // Remove any rows with this id OR this username (clears PK/unique conflicts)
-      await client.query('DELETE FROM users WHERE id=$1 OR username=$2', [u.id, u.username]);
-      await client.query(
-        'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)',
-        [u.id, u.username, hash, u.name, u.role]
-      );
+      const byId       = await client.query('SELECT id FROM users WHERE id=$1',       [u.id]);
+      const byUsername = await client.query('SELECT id FROM users WHERE username=$1', [u.username]);
+      if (byId.rows.length === 0 && byUsername.rows.length === 0) {
+        // Genuinely new — insert with defaults
+        await client.query(
+          'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)',
+          [u.id, u.username, hash, u.name, u.role]
+        );
+      } else {
+        // Already exists — only fix the password (never touch name/username/role)
+        if (byId.rows.length > 0)       await client.query('UPDATE users SET password=$1 WHERE id=$2',       [hash, u.id]);
+        if (byUsername.rows.length > 0) await client.query('UPDATE users SET password=$1 WHERE username=$2', [hash, u.username]);
+      }
     }
-    console.log('✅ Default users restored');
+    console.log('✅ Default users seeded');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
