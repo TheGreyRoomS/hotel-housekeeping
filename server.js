@@ -153,16 +153,16 @@ async function initDB() {
       );
     `);
 
-    // Ensure default users exist — only insert if missing, never overwrite custom names/usernames
+    // Insert default users only if they don't exist — never overwrite logins or passwords
     for (const u of DEFAULT_USERS) {
       const hash = await bcrypt.hash(u.password, 10);
       await client.query(
         `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password`,
+         ON CONFLICT DO NOTHING`,
         [u.id, u.username, hash, u.name, u.role]
       );
     }
-    console.log('✅ Default users synced');
+    console.log('✅ Default users checked');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
