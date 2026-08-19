@@ -628,9 +628,9 @@ function defaultView() {
 function buildNav() {
   let tabs = [];
   if (currentUser.role === 'housekeeper') {
-    tabs = [['my-rooms','🧹 My Work'],['all-rooms','🏨 All Spaces']];
+    tabs = [['my-rooms','🧹 My Work'],['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History']];
   } else if (currentUser.role === 'maintenance') {
-    tabs = [['issues','🔧 Maintenance']];
+    tabs = [['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History']];
   } else {
     tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance'],['history','📅 History']];
     if (isAdmin()) tabs.push(['admin','⚙️ Users']);
