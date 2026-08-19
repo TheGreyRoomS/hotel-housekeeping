@@ -153,21 +153,19 @@ async function initDB() {
       );
     `);
 
-        // Seed default users — only INSERT if they don't exist; never delete, never overwrite names or passwords
+        // Seed default users only if they do not already exist
+    // NEVER update, delete or overwrite any existing user — preserves all staff names, logins and passwords
     for (const u of DEFAULT_USERS) {
-      const hash = await bcrypt.hash(u.password, 10);
-      const byId       = await client.query('SELECT id FROM users WHERE id=$1',       [u.id]);
-      const byUsername = await client.query('SELECT id FROM users WHERE username=$1', [u.username]);
-      if (byId.rows.length === 0 && byUsername.rows.length === 0) {
-        // Genuinely new — insert with defaults
+      const exists = await client.query(
+        'SELECT 1 FROM users WHERE id=$1 OR username=$2 LIMIT 1',
+        [u.id, u.username]
+      );
+      if (exists.rows.length === 0) {
+        const hash = await bcrypt.hash(u.password, 10);
         await client.query(
           'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)',
           [u.id, u.username, hash, u.name, u.role]
         );
-      } else {
-        // Already exists — only fix the password (never touch name/username/role)
-        if (byId.rows.length > 0)       await client.query('UPDATE users SET password=$1 WHERE id=$2',       [hash, u.id]);
-        if (byUsername.rows.length > 0) await client.query('UPDATE users SET password=$1 WHERE username=$2', [hash, u.username]);
       }
     }
     console.log('✅ Default users seeded');
