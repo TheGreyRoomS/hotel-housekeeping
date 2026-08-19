@@ -270,29 +270,6 @@ async function getFullState() {
 
 // ── ROUTES ──────────────────────────────────────────────
 
-// TEMP: one-time password reset — remove after login confirmed
-app.get('/api/fix-login', async (req, res) => {
-  try {
-    const results = [];
-    for (const u of DEFAULT_USERS) {
-      const hash = await bcrypt.hash(u.password, 10);
-      const upd = await pool.query('UPDATE users SET password=$1 WHERE username=$2', [hash, u.username]);
-      if (upd.rowCount === 0) {
-        await pool.query(
-          'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (username) DO UPDATE SET password=EXCLUDED.password',
-          [u.id, u.username, hash, u.name, u.role]
-        );
-        results.push({ username: u.username, action: 'inserted' });
-      } else {
-        results.push({ username: u.username, action: 'updated' });
-      }
-    }
-    res.json({ ok: true, results });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 
 // Login
 app.post('/api/login', async (req, res) => {
