@@ -19,20 +19,7 @@ const pool = new Pool({
 
 // ── MIDDLEWARE ──────────────────────────────────────────
 app.use(express.json({ limit: '50mb' })); // allow large base64 photos
-app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders(res, filePath) {
-    const name = path.basename(filePath);
-    // The service worker and the shell must never be served stale, or
-    // installed devices keep running an old build.
-    if (name === 'sw.js' || name === 'index.html' || name === 'manifest.json') {
-      res.setHeader('Cache-Control', 'no-cache');
-    } else if (filePath.includes(`${path.sep}icons${path.sep}`)) {
-      // A day, not a week: icons rarely change, but when they do a week is
-      // a long time to have half the phones showing the old tile.
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-    }
-  },
-}));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ── AUTH MIDDLEWARE ─────────────────────────────────────
 function auth(req, res, next) {
@@ -153,22 +140,17 @@ async function initDB() {
       );
     `);
 
-        // Seed default users only if they do not already exist
-    // NEVER update, delete or overwrite any existing user — preserves all staff names, logins and passwords
+    // Always refresh user passwords on startup to prevent login failures after redeploy
+    // Only password is updated on conflict; username, name, role are preserved as-is
     for (const u of DEFAULT_USERS) {
-      const exists = await client.query(
-        'SELECT 1 FROM users WHERE id=$1 OR username=$2 LIMIT 1',
-        [u.id, u.username]
+      const hash = await bcrypt.hash(u.password, 10);
+      await client.query(
+        `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password`,
+        [u.id, u.username, hash, u.name, u.role]
       );
-      if (exists.rows.length === 0) {
-        const hash = await bcrypt.hash(u.password, 10);
-        await client.query(
-          'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)',
-          [u.id, u.username, hash, u.name, u.role]
-        );
-      }
     }
-    console.log('✅ Default users seeded');
+    console.log('✅ Default users passwords refreshed');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
@@ -235,13 +217,10 @@ function mapIssue(i) {
 }
 
 async function getFullState() {
-  // Photos: only show today's uploads in room/area views — older ones stay in history
-  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-  const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999);
   const [roomsRes, areasRes, photosRes, issuesRes] = await Promise.all([
     pool.query('SELECT * FROM rooms ORDER BY id'),
     pool.query('SELECT * FROM areas ORDER BY id'),
-    pool.query('SELECT * FROM photos WHERE uploaded_at >= $1 AND uploaded_at <= $2 ORDER BY uploaded_at', [todayStart.getTime(), todayEnd.getTime()]),
+    pool.query('SELECT * FROM photos ORDER BY uploaded_at'),
     pool.query('SELECT * FROM issues ORDER BY reported_at'),
   ]);
 
@@ -274,7 +253,6 @@ async function getFullState() {
 }
 
 // ── ROUTES ──────────────────────────────────────────────
-
 
 // Login
 app.post('/api/login', async (req, res) => {
@@ -632,52 +610,9 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// Manual day-reset endpoint (admin only)
-// Photos are NEVER deleted — they stay in history filtered by date.
-// Only room/area status, notes and timers are cleared.
-app.post('/api/admin/reset-day', auth, requireRole('admin'), async (req, res) => {
-  try {
-    await pool.query(`UPDATE rooms SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
-    await pool.query(`UPDATE areas SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
-    console.log('🌅 Manual day reset triggered by', req.user.username);
-    res.json({ ok: true, message: 'Day reset complete' });
-  } catch(e) {
-    console.error('Reset error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── DAILY RESET ─────────────────────────────────────────
-// Runs at 02:00 server time every day.
-// Clears notes, photos, open maintenance issues and resets all rooms/areas to dirty.
-// History remains intact (photos/issues are stored by date and visible in History tab).
-function scheduleDailyReset() {
-  function msUntil2AM() {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(2, 0, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next - now;
-  }
-  setTimeout(async function run() {
-    try {
-      await pool.query(`UPDATE rooms SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
-      await pool.query(`UPDATE areas SET status='dirty', notes='', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL`);
-      // Photos never deleted — remain in history filtered by upload date
-      // Open issues stay open until manually resolved by staff
-      console.log('🌅 Daily reset complete — rooms cleared for new day');
-    } catch(e) {
-      console.error('Daily reset error:', e.message);
-    }
-    setTimeout(run, 24 * 60 * 60 * 1000); // repeat every 24h
-  }, msUntil2AM());
-  console.log(`⏰ Daily reset scheduled`);
-}
-
 // ── START ───────────────────────────────────────────────
 initDB()
   .then(() => {
-    scheduleDailyReset();
     app.listen(PORT, () => {
       console.log(`🏨 Hotel Housekeeping running → http://localhost:${PORT}`);
     });
