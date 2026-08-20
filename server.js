@@ -59,6 +59,7 @@ const AREAS_META = [
   { id: 'a13', name: 'Fountain',            icon: '⛲', linked_room: null },
   { id: 'a14', name: 'Water Plants',        icon: '💧', linked_room: null },
   { id: 'a15', name: 'Water Plants Rm 3&4 Terrace', icon: '🌱', linked_room: null },
+  { id: 'a16', name: 'Other',                       icon: '📍', linked_room: null },
 ];
 
 const DEFAULT_USERS = [
@@ -176,6 +177,14 @@ async function initDB() {
         );
       }
       console.log('✅ Seeded common areas');
+    } else {
+      // Ensure any new areas added to AREAS_META get inserted into existing DBs
+      for (const a of AREAS_META) {
+        await client.query(
+          'INSERT INTO areas (id,name,icon,linked_room) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING',
+          [a.id, a.name, a.icon, a.linked_room]
+        );
+      }
     }
 
     // Run daily reset if it hasn't run yet today (handles Render spin-down)
