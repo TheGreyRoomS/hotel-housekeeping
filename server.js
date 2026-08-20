@@ -138,6 +138,11 @@ async function initDB() {
         ended_at    BIGINT NOT NULL,
         duration_ms BIGINT
       );
+
+      CREATE TABLE IF NOT EXISTS settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
 
     // Always refresh user passwords on startup to prevent login failures after redeploy
@@ -173,10 +178,31 @@ async function initDB() {
       console.log('✅ Seeded common areas');
     }
 
+    // Run daily reset if it hasn't run yet today (handles Render spin-down)
+    await runDailyResetIfNeeded(client);
+
     console.log('🏨 Database ready');
   } finally {
     client.release();
   }
+}
+
+async function runDailyResetIfNeeded(client) {
+  const todayUTC = new Date().toISOString().slice(0, 10); // e.g. "2026-08-20"
+  const res = await client.query(`SELECT value FROM settings WHERE key='last_reset_date'`);
+  const lastReset = res.rows[0]?.value || '';
+  if (lastReset === todayUTC) {
+    console.log(`✅ Daily reset already ran today (${todayUTC})`);
+    return;
+  }
+  await client.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+  await client.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+  await client.query(
+    `INSERT INTO settings (key,value) VALUES ('last_reset_date',$1)
+     ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
+    [todayUTC]
+  );
+  console.log(`🔄 Daily reset done for ${todayUTC}`);
 }
 
 // ── HELPERS ─────────────────────────────────────────────
@@ -270,8 +296,14 @@ function scheduleDailyReset() {
   console.log(`⏰ Daily reset scheduled in ${Math.round(msUntil / 60000)} min (at 2 AM UTC)`);
   setTimeout(async () => {
     try {
+      const todayUTC = new Date().toISOString().slice(0, 10);
       await pool.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
       await pool.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+      await pool.query(
+        `INSERT INTO settings (key,value) VALUES ('last_reset_date',$1)
+         ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
+        [todayUTC]
+      );
       console.log('🔄 Daily reset done — all rooms and areas unassigned');
     } catch (e) {
       console.error('❌ Daily reset error:', e);
