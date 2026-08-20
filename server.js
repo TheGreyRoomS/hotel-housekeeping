@@ -340,14 +340,23 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Full state (rooms + areas + public user list)
+// Full state (rooms + areas + public user list + other issues)
 app.get('/api/state', auth, async (req, res) => {
   try {
     const { rooms, areas } = await getFullState();
-    const usersRes = await pool.query(
-      'SELECT id, name, role, username FROM users ORDER BY role, name'
-    );
-    res.json({ rooms, areas, users: usersRes.rows });
+    const [usersRes, otherIssuesRes] = await Promise.all([
+      pool.query('SELECT id, name, role, username FROM users ORDER BY role, name'),
+      pool.query(
+        `SELECT i.*, u.name AS reporter_name FROM issues i
+         LEFT JOIN users u ON u.id = i.reported_by
+         WHERE i.item_type='other' ORDER BY i.reported_at`
+      ),
+    ]);
+    const otherIssues = otherIssuesRes.rows.map(i => ({
+      ...mapIssue(i),
+      locationName: i.item_id,
+    }));
+    res.json({ rooms, areas, users: usersRes.rows, otherIssues });
   } catch (e) {
     console.error('State error:', e);
     res.status(500).json({ error: 'Server error' });

@@ -395,7 +395,7 @@ const POLL_MS = 25000; // sync every 25 seconds
 // ═══════════════════════════════════════════════════════
 let token         = null;
 let currentUser   = null; // {id, name, role, username}
-let state         = { rooms: [], areas: [], users: [] };
+let state         = { rooms: [], areas: [], users: [], otherIssues: [] };
 let currentView   = 'overview';
 let currentItemId = null;
 let timerInterval = null;
@@ -827,6 +827,7 @@ function renderIssues() {
   const all = [];
   state.rooms.forEach(r => r.maintenanceIssues.forEach(i => all.push({...i, srcId:r.id, srcName:`Room ${r.id}`})));
   state.areas.forEach(a => a.maintenanceIssues.forEach(i => all.push({...i, srcId:a.id, srcName:`${a.icon} ${a.name}`})));
+  (state.otherIssues||[]).forEach(i => all.push({...i, srcId:'other', srcName:`📍 ${i.locationName}`}));
   const filtered = issueFilter==='all' ? all : all.filter(i=>i.status!=='resolved');
   const open = all.filter(i=>i.status!=='resolved').length;
   return `
@@ -840,7 +841,7 @@ function renderIssues() {
     </div>
     ${!filtered.length ? `<div class="empty"><div class="ei">✅</div><p>No ${issueFilter==='open'?'open ':''}issues!</p></div>` :
       filtered.map(iss => {
-        const did = isAreaId(iss.srcId) ? `'${iss.srcId}'` : iss.srcId;
+        const did = (isAreaId(iss.srcId)||iss.srcId==='other') ? `'${iss.srcId}'` : iss.srcId;
         return `
         <div class="maint-card">
           <div class="src-badge">${iss.srcName}</div>
@@ -1183,10 +1184,15 @@ function openAddIssueGlobal() {
         <div class="modal-body">
           <div class="fg">
             <label>Location</label>
-            <select id="iss-g-loc">
+            <select id="iss-g-loc" onchange="document.getElementById('iss-g-other-wrap').style.display=this.value==='other:__other__'?'block':'none'">
               <optgroup label="🛏 Rooms">${roomOpts}</optgroup>
               <optgroup label="🏞 Areas">${areaOpts}</optgroup>
+              <optgroup label="📍 Other"><option value="other:__other__">Other (specify below)</option></optgroup>
             </select>
+          </div>
+          <div class="fg" id="iss-g-other-wrap" style="display:none">
+            <label>Specify location</label>
+            <input type="text" id="iss-g-other-loc" placeholder="e.g. Lobby, Gym, Parking…">
           </div>
           <div class="fg">
             <label>Description</label>
@@ -1209,7 +1215,13 @@ async function doAddIssueGlobal() {
   const desc   = (document.getElementById('iss-g-desc')||{}).value?.trim();
   const errEl  = document.getElementById('iss-g-err');
   if (!desc) { errEl.textContent='Please describe the issue.'; errEl.classList.remove('hidden'); return; }
-  const [itemType, itemId] = locVal.split(':');
+  const [itemType, itemId0] = locVal.split(':');
+  let itemId = itemId0;
+  if (itemType === 'other') {
+    const customLoc = (document.getElementById('iss-g-other-loc')||{}).value?.trim();
+    if (!customLoc) { errEl.textContent='Please enter the location.'; errEl.classList.remove('hidden'); return; }
+    itemId = customLoc;
+  }
   try {
     await api('/api/issues', { method:'POST', body:{ itemType, itemId, description:desc } });
     await syncState(true);
