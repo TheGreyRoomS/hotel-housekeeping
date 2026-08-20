@@ -698,7 +698,6 @@ function cardHTML(item) {
   const ia    = isAreaId(item.id);
   const names = getAssignedNames(item);
   const pics  = getPhotos(item).length;
-  const iss   = item.maintenanceIssues.filter(i => i.status !== 'resolved').length;
   const active = item.status === 'cleaning' && item.cleaningStart;
   const dur = active ? formatDur(Date.now() - item.cleaningStart)
     : (item.cleaningStart && item.cleaningEnd ? formatDur(item.cleaningEnd - item.cleaningStart) : null);
@@ -713,7 +712,6 @@ function cardHTML(item) {
         ${names ? `<div class="ic-info"><span>🧹</span>${names}</div>` : '<div class="ic-info" style="color:#cbd5e1">Unassigned</div>'}
         ${dur ? `<div class="ic-info"><span>⏱</span><span class="live-dur" data-rid="${item.id}">${dur}</span></div>` : ''}
         ${pics ? `<div class="ic-info"><span>📷</span>${pics} photo${pics>1?'s':''}</div>` : ''}
-        ${iss  ? `<div class="ic-info" style="color:var(--cleaning)"><span>🔧</span>${iss} issue${iss>1?'s':''}</div>` : ''}
       </div>
       <div class="ic-bar s-${item.status}"></div>
     </div>`;
