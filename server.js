@@ -627,6 +627,17 @@ app.get('/api/history', auth, async (req, res) => {
   }
 });
 
+// Clear all cleaning logs (admin only)
+app.delete('/api/admin/cleaning-logs', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM cleaning_logs');
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Clear logs error:', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── CATCH-ALL → serve frontend ──────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
