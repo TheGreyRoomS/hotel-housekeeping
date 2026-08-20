@@ -224,6 +224,14 @@ async function getFullState() {
     pool.query('SELECT * FROM issues ORDER BY reported_at'),
   ]);
 
+  // Only show photos uploaded since the last 2 AM UTC (so yesterday's minibar photos
+  // don't appear in room views — they remain accessible in History)
+  const now = new Date();
+  const last2am = new Date(now);
+  last2am.setUTCHours(2, 0, 0, 0);
+  if (last2am > now) last2am.setUTCDate(last2am.getUTCDate() - 1);
+  const since2am = last2am.getTime();
+
   const rooms = roomsRes.rows.map(r => ({
     id:            r.id,
     status:        r.status,
@@ -231,7 +239,7 @@ async function getFullState() {
     cleaningStart: r.cleaning_start ? Number(r.cleaning_start) : null,
     cleaningEnd:   r.cleaning_end   ? Number(r.cleaning_end)   : null,
     notes:         r.notes || '',
-    minibarPhotos: photosRes.rows.filter(p => p.item_type === 'room' && p.item_id === String(r.id)).map(mapPhoto),
+    minibarPhotos: photosRes.rows.filter(p => p.item_type === 'room' && p.item_id === String(r.id) && Number(p.uploaded_at) >= since2am).map(mapPhoto),
     maintenanceIssues: issuesRes.rows.filter(i => i.item_type === 'room' && i.item_id === String(r.id)).map(mapIssue),
   }));
 
@@ -245,11 +253,31 @@ async function getFullState() {
     cleaningStart: a.cleaning_start ? Number(a.cleaning_start) : null,
     cleaningEnd:   a.cleaning_end   ? Number(a.cleaning_end)   : null,
     notes:         a.notes || '',
-    photos:        photosRes.rows.filter(p => p.item_type === 'area' && p.item_id === a.id).map(mapPhoto),
+    photos:        photosRes.rows.filter(p => p.item_type === 'area' && p.item_id === a.id && Number(p.uploaded_at) >= since2am).map(mapPhoto),
     maintenanceIssues: issuesRes.rows.filter(i => i.item_type === 'area' && i.item_id === a.id).map(mapIssue),
   }));
 
   return { rooms, areas };
+}
+
+// ── DAILY RESET AT 2 AM UTC ─────────────────────────────
+function scheduleDailyReset() {
+  const now = new Date();
+  const next2am = new Date(now);
+  next2am.setUTCHours(2, 0, 0, 0);
+  if (next2am <= now) next2am.setUTCDate(next2am.getUTCDate() + 1);
+  const msUntil = next2am - now;
+  console.log(`⏰ Daily reset scheduled in ${Math.round(msUntil / 60000)} min (at 2 AM UTC)`);
+  setTimeout(async () => {
+    try {
+      await pool.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+      await pool.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+      console.log('🔄 Daily reset done — all rooms and areas unassigned');
+    } catch (e) {
+      console.error('❌ Daily reset error:', e);
+    }
+    scheduleDailyReset(); // reschedule for next day
+  }, msUntil);
 }
 
 // ── ROUTES ──────────────────────────────────────────────
@@ -616,6 +644,7 @@ initDB()
     app.listen(PORT, () => {
       console.log(`🏨 Hotel Housekeeping running → http://localhost:${PORT}`);
     });
+    scheduleDailyReset();
   })
   .catch(err => {
     console.error('❌ Failed to start:', err.message);
