@@ -146,17 +146,18 @@ async function initDB() {
       );
     `);
 
-    // Always refresh user passwords on startup to prevent login failures after redeploy
-    // Only password is updated on conflict; username, name, role are preserved as-is
+    // Only insert default users if they do not already exist — never overwrite existing accounts
     for (const u of DEFAULT_USERS) {
-      const hash = await bcrypt.hash(u.password, 10);
-      await client.query(
-        `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password`,
-        [u.id, u.username, hash, u.name, u.role]
-      );
+      const exists = await client.query('SELECT 1 FROM users WHERE id=$1 LIMIT 1', [u.id]);
+      if (exists.rows.length === 0) {
+        const hash = await bcrypt.hash(u.password, 10);
+        await client.query(
+          'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
+          [u.id, u.username, hash, u.name, u.role]
+        );
+      }
     }
-    console.log('✅ Default users passwords refreshed');
+    console.log('✅ User accounts checked (existing accounts untouched)');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
