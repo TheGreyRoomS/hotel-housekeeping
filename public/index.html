@@ -798,7 +798,7 @@ function hkCard(item) {
       <div id="hd-${sid}" class="hk-det hidden">
         <div class="sec-lbl">📷 ${ia?'Photos':'Minibar Photos'}</div>
         <div class="photos-grid">
-          ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.data}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
+          ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.url}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
           <div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>
         </div>
         <div class="sec-lbl" style="margin-top:14px">📝 Notes</div>
@@ -953,7 +953,7 @@ function openItemModal(id) {
           <div class="msec">
             <div class="sec-lbl">📷 ${ia?'Photos':'Minibar Photos'} (${pics.length})</div>
             <div class="photos-grid">
-              ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.data}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
+              ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.url}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
               <div class="ph-upload" onclick="triggerUpload(${did},'modal')"><div style="font-size:22px">📷</div><div>Add Photo</div></div>
             </div>
           </div>
@@ -1124,7 +1124,7 @@ function viewPhoto(photoId, id) {
   const item = findItem(id);
   const p    = item ? getPhotos(item).find(p=>p.id===photoId) : null;
   if (!p) return;
-  document.getElementById('pv-img').src = p.data;
+  document.getElementById('pv-img').src = p.url;
   document.getElementById('pv-cap').textContent = `${itemName(item)} · ${p.caption||''} · ${fmtDate(p.timestamp)}`;
   document.getElementById('photo-viewer').classList.remove('hidden');
 }
@@ -1469,7 +1469,7 @@ async function loadHistory() {
         ps.forEach(p => {
           const t = p.uploadedAt ? new Date(p.uploadedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
           html += `<div class="hist-photo-wrap">
-            <img src="${p.data}" onclick="histViewPhoto('${p.id}','${p.data}','${label}','${t}')" title="${p.caption||''}">
+            <img src="${p.url}" onclick="histViewPhoto('${p.id}','${p.url}','${label}','${t}')" title="${p.caption||''}">
             <div class="hist-photo-meta">${t}${p.uploadedBy?' · '+p.uploadedBy:''}</div>
           </div>`;
         });

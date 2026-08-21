@@ -2,7 +2,7 @@
  * Bump CACHE_VERSION whenever index.html or the icons change so every
  * installed device picks up the new version on next launch.
  */
-const CACHE_VERSION = 'tgh-hk-v2';
+const CACHE_VERSION = 'tgh-hk-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -54,7 +54,23 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // API + login must always hit the network — never serve stale room data.
+  // Photos are immutable and served with a long cache lifetime, so treat them
+  // like any other static asset rather than refetching them with the API.
+  if (url.pathname.startsWith('/api/photos/')) {
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_VERSION).then((c) => c.put(req, copy));
+        }
+        return res;
+      }))
+    );
+    return;
+  }
+
+  // Everything else under /api/ must always hit the network — never serve stale
+  // room data.
   if (url.pathname.startsWith('/api/')) return;
 
   // Page loads: network first, fall back to the cached shell when offline.
