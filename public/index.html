@@ -396,6 +396,7 @@ const POLL_MS = 25000; // sync every 25 seconds
 let token         = null;
 let currentUser   = null; // {id, name, role, username}
 let state         = { rooms: [], areas: [], users: [], otherIssues: [] };
+let photoCache    = {};  // keyed by String(itemId), populated on demand
 let currentView   = 'overview';
 let currentItemId = null;
 let timerInterval = null;
@@ -422,6 +423,26 @@ async function api(path, opts = {}) {
     throw new Error(j.error || `Error ${res.status}`);
   }
   return res.json();
+}
+
+async function loadPhotosFor(id) {
+  const key = String(id);
+  const itemType = isAreaId(id) ? 'area' : 'room';
+  try {
+    const photos = await api(`/api/photos/${itemType}/${id}`);
+    photoCache[key] = photos;
+    return photos;
+  } catch(e) {
+    photoCache[key] = [];
+    return [];
+  }
+}
+
+function renderPhotoGrid(photos, id) {
+  const did = isAreaId(id) ? `'${id}'` : id;
+  return photos.map(p =>
+    `<div class="ph-item"><img class="ph-thumb" src="${p.data}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`
+  ).join('');
 }
 
 async function syncState(silent = false) {
@@ -770,7 +791,6 @@ function hkCard(item) {
   const active = item.status === 'cleaning' && item.cleaningStart;
   const dur    = active ? formatDur(Date.now() - item.cleaningStart)
     : (item.cleaningStart && item.cleaningEnd ? formatDur(item.cleaningEnd - item.cleaningStart) : null);
-  const pics   = getPhotos(item);
   const open   = item.maintenanceIssues.filter(i => i.status !== 'resolved');
   const sid    = String(item.id).replace(/\W/g,'_');
   return `
@@ -795,10 +815,10 @@ function hkCard(item) {
       <div class="hk-expand" onclick="toggleDet('${sid}')">
         <span id="ei-${sid}">▸</span> Photos & Issues${open.length ? ` <span style="color:var(--cleaning)">(${open.length})</span>` : ''}
       </div>
-      <div id="hd-${sid}" class="hk-det hidden">
+      <div id="hd-${sid}" class="hk-det hidden" data-itemid="${item.id}">
         <div class="sec-lbl">📷 ${ia?'Photos':'Minibar Photos'}</div>
-        <div class="photos-grid">
-          ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.url}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
+        <div class="photos-grid" id="ph-${sid}">
+          <div style="font-size:12px;color:var(--muted);padding:6px">Loading…</div>
           <div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>
         </div>
         <div class="sec-lbl" style="margin-top:14px">📝 Notes</div>
@@ -899,7 +919,6 @@ function openItemModal(id) {
   const ia    = isAreaId(id);
   const did   = ia ? `'${id}'` : id;
   const hks   = getHKs();
-  const pics  = getPhotos(item);
   const open  = item.maintenanceIssues.filter(i=>i.status!=='resolved').length;
   const active = item.status==='cleaning' && item.cleaningStart;
   const dur   = active ? formatDur(Date.now()-item.cleaningStart)
@@ -951,9 +970,9 @@ function openItemModal(id) {
             <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doNotes(${did})">Save Notes</button>
           </div>` : ''}
           <div class="msec">
-            <div class="sec-lbl">📷 ${ia?'Photos':'Minibar Photos'} (${pics.length})</div>
-            <div class="photos-grid">
-              ${pics.map(p=>`<div class="ph-item"><img class="ph-thumb" src="${p.url}" onclick="viewPhoto('${p.id}',${did})"><button class="ph-del" onclick="doDelPhoto(${did},'${p.id}',event)">✕</button></div>`).join('')}
+            <div class="sec-lbl" id="modal-ph-lbl">📷 ${ia?'Photos':'Minibar Photos'}</div>
+            <div class="photos-grid" id="modal-ph-grid">
+              <div style="font-size:12px;color:var(--muted);padding:6px">Loading…</div>
               <div class="ph-upload" onclick="triggerUpload(${did},'modal')"><div style="font-size:22px">📷</div><div>Add Photo</div></div>
             </div>
           </div>
@@ -964,6 +983,15 @@ function openItemModal(id) {
       </div>
     </div>`;
   startTimers();
+  // Load photos on demand (not in state poll)
+  loadPhotosFor(id).then(photos => {
+    const grid = document.getElementById('modal-ph-grid');
+    const lbl  = document.getElementById('modal-ph-lbl');
+    if (!grid) return;
+    if (lbl) lbl.textContent = `📷 ${ia?'Photos':'Minibar Photos'} (${photos.length})`;
+    grid.innerHTML = renderPhotoGrid(photos, id) +
+      `<div class="ph-upload" onclick="triggerUpload(${did},'modal')"><div style="font-size:22px">📷</div><div>Add Photo</div></div>`;
+  });
 }
 
 function closeModal() {
@@ -1101,6 +1129,7 @@ function triggerUpload(id, ctx) {
         const itemType = isAreaId(id) ? 'area' : 'room';
         await api('/api/photos', { method:'POST', body:{ itemType, itemId:id, data, caption:file.name } });
       }
+      delete photoCache[String(id)];
       await syncState(true);
       toast(`${files.length} photo${files.length>1?'s':''} uploaded 📷`, 'success');
       if (ctx === 'modal') openItemModal(id); else renderView();
@@ -1114,6 +1143,7 @@ async function doDelPhoto(id, photoId, e) {
   if (!confirm('Delete this photo?')) return;
   try {
     await api(`/api/photos/${photoId}`, { method:'DELETE' });
+    delete photoCache[String(id)];
     await syncState(true);
     toast('Photo deleted','info');
     if (currentItemId !== null) openItemModal(id); else renderView();
@@ -1121,10 +1151,11 @@ async function doDelPhoto(id, photoId, e) {
 }
 
 function viewPhoto(photoId, id) {
-  const item = findItem(id);
-  const p    = item ? getPhotos(item).find(p=>p.id===photoId) : null;
+  const item   = findItem(id);
+  const cached = photoCache[String(id)] || [];
+  const p      = cached.find(p=>p.id===photoId);
   if (!p) return;
-  document.getElementById('pv-img').src = p.url;
+  document.getElementById('pv-img').src = p.data;
   document.getElementById('pv-cap').textContent = `${itemName(item)} · ${p.caption||''} · ${fmtDate(p.timestamp)}`;
   document.getElementById('photo-viewer').classList.remove('hidden');
 }
@@ -1345,6 +1376,16 @@ function toggleDet(sid) {
   const open = d.classList.contains('hidden');
   d.classList.toggle('hidden', !open);
   if (i) i.textContent = open ? '▾' : '▸';
+  if (open) {
+    const itemId = d.dataset.itemid;
+    const did = isAreaId(itemId) ? `'${itemId}'` : itemId;
+    loadPhotosFor(itemId).then(photos => {
+      const grid = document.getElementById(`ph-${sid}`);
+      if (!grid) return;
+      grid.innerHTML = renderPhotoGrid(photos, itemId) +
+        `<div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>`;
+    });
+  }
 }
 
 function startTimers() {
@@ -1469,7 +1510,7 @@ async function loadHistory() {
         ps.forEach(p => {
           const t = p.uploadedAt ? new Date(p.uploadedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
           html += `<div class="hist-photo-wrap">
-            <img src="${p.url}" onclick="histViewPhoto('${p.id}','${p.url}','${label}','${t}')" title="${p.caption||''}">
+            <img src="${p.data}" onclick="histViewPhoto('${p.id}','${p.data}','${label}','${t}')" title="${p.caption||''}">
             <div class="hist-photo-meta">${t}${p.uploadedBy?' · '+p.uploadedBy:''}</div>
           </div>`;
         });

@@ -4,7 +4,6 @@ const { Pool } = require('pg');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const path     = require('path');
-const crypto   = require('crypto');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -20,21 +19,7 @@ const pool = new Pool({
 
 // ── MIDDLEWARE ──────────────────────────────────────────
 app.use(express.json({ limit: '50mb' })); // allow large base64 photos
-// Icons and other static files change only when their contents change, so let
-// devices keep them for a year. index.html, sw.js and manifest.json are what
-// tell a device a new version exists, so those must never be cached — otherwise
-// a deploy can't reach a phone that already has the app installed.
-const NEVER_CACHE = new Set(['/index.html', '/sw.js', '/manifest.json', '/']);
-app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '1y',
-  setHeaders(res, filePath) {
-    const rel = '/' + path.relative(path.join(__dirname, 'public'), filePath)
-                        .split(path.sep).join('/');
-    if (NEVER_CACHE.has(rel)) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-  },
-}));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ── AUTH MIDDLEWARE ─────────────────────────────────────
 function auth(req, res, next) {
@@ -246,25 +231,9 @@ function parseAssignedTo(val) {
   }
 }
 
-const IMAGE_TYPES = new Set([
-  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
-]);
-
-function photoSig(id) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(String(id)).digest('hex').slice(0, 16);
-}
-
-function photoUrl(id) {
-  return `/api/photos/${id}?s=${photoSig(id)}`;
-}
-
 function mapPhoto(p) {
   return {
-    // Deliberately NOT p.data. The full base64 image used to be sent here, which
-    // meant every device re-downloaded every photo of the day every time it
-    // polled — 25 seconds apart, all day. Send a URL and let the browser cache
-    // the image once.
-    id: p.id, url: photoUrl(p.id),
+    id: p.id, data: p.data,
     uploadedBy: p.uploaded_by,
     timestamp:  p.uploaded_at ? Number(p.uploaded_at) : null,
     caption:    p.caption || '',
@@ -284,24 +253,11 @@ function mapIssue(i) {
 }
 
 async function getFullState() {
-  const [roomsRes, areasRes, photosRes, issuesRes] = await Promise.all([
+  const [roomsRes, areasRes, issuesRes] = await Promise.all([
     pool.query('SELECT * FROM rooms ORDER BY id'),
     pool.query('SELECT * FROM areas ORDER BY id'),
-    // Every column EXCEPT data. Selecting * dragged every photo's full base64
-    // out of Postgres on every single poll — megabytes of database traffic and
-    // memory churn every 25 seconds, for bytes that are then thrown away.
-    pool.query('SELECT id, item_type, item_id, uploaded_by, uploaded_at, caption '
-               + 'FROM photos ORDER BY uploaded_at'),
     pool.query('SELECT * FROM issues ORDER BY reported_at'),
   ]);
-
-  // Only show photos uploaded since the last 2 AM UTC (so yesterday's minibar photos
-  // don't appear in room views — they remain accessible in History)
-  const now = new Date();
-  const last2am = new Date(now);
-  last2am.setUTCHours(2, 0, 0, 0);
-  if (last2am > now) last2am.setUTCDate(last2am.getUTCDate() - 1);
-  const since2am = last2am.getTime();
 
   const rooms = roomsRes.rows.map(r => ({
     id:            r.id,
@@ -310,7 +266,7 @@ async function getFullState() {
     cleaningStart: r.cleaning_start ? Number(r.cleaning_start) : null,
     cleaningEnd:   r.cleaning_end   ? Number(r.cleaning_end)   : null,
     notes:         r.notes || '',
-    minibarPhotos: photosRes.rows.filter(p => p.item_type === 'room' && p.item_id === String(r.id) && Number(p.uploaded_at) >= since2am).map(mapPhoto),
+    minibarPhotos: [],  // loaded on demand via /api/photos/:itemType/:itemId
     maintenanceIssues: issuesRes.rows.filter(i => i.item_type === 'room' && i.item_id === String(r.id)).map(mapIssue),
   }));
 
@@ -324,12 +280,32 @@ async function getFullState() {
     cleaningStart: a.cleaning_start ? Number(a.cleaning_start) : null,
     cleaningEnd:   a.cleaning_end   ? Number(a.cleaning_end)   : null,
     notes:         a.notes || '',
-    photos:        photosRes.rows.filter(p => p.item_type === 'area' && p.item_id === a.id && Number(p.uploaded_at) >= since2am).map(mapPhoto),
+    photos:        [],  // loaded on demand via /api/photos/:itemType/:itemId
     maintenanceIssues: issuesRes.rows.filter(i => i.item_type === 'area' && i.item_id === a.id).map(mapIssue),
   }));
 
   return { rooms, areas };
 }
+
+// Photos on demand (keeps photos out of every state poll to save bandwidth)
+app.get('/api/photos/:itemType/:itemId', auth, async (req, res) => {
+  try {
+    const { itemType, itemId } = req.params;
+    const now = new Date();
+    const last2am = new Date(now);
+    last2am.setUTCHours(2, 0, 0, 0);
+    if (last2am > now) last2am.setUTCDate(last2am.getUTCDate() - 1);
+    const since2am = last2am.getTime();
+    const result = await pool.query(
+      'SELECT * FROM photos WHERE item_type=$1 AND item_id=$2 AND uploaded_at >= $3 ORDER BY uploaded_at',
+      [itemType, String(itemId), since2am]
+    );
+    res.json(result.rows.map(mapPhoto));
+  } catch (e) {
+    console.error('Photos error:', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // ── DAILY RESET AT 2 AM UTC ─────────────────────────────
 function scheduleDailyReset() {
@@ -510,46 +486,6 @@ app.post('/api/photos', auth, async (req, res) => {
   }
 });
 
-// Serve one photo's bytes. No bearer token — an <img> tag cannot send one — so
-// the signed query parameter is what authorises it. Cached hard: a photo's
-// content never changes, and a new photo gets a new id.
-app.get('/api/photos/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const expected = photoSig(id);
-    const given = String(req.query.s || '');
-    if (given.length !== expected.length ||
-        !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected))) {
-      return res.status(403).send('Forbidden');
-    }
-
-    const r = await pool.query('SELECT data FROM photos WHERE id=$1', [id]);
-    if (!r.rows.length) return res.status(404).send('Not found');
-
-    const raw = r.rows[0].data || '';
-    const m = /^data:([^;,]+);base64,(.*)$/s.exec(raw);
-    if (!m) return res.status(415).send('Unsupported photo format');
-
-    // The stored type came from whatever the uploading device claimed. Serving
-    // it back verbatim would let a signed-in phone upload HTML and have this
-    // app's own domain serve it as a page. Only real image types get served.
-    const type = m[1].toLowerCase();
-    if (!IMAGE_TYPES.has(type)) return res.status(415).send('Not an image');
-
-    const body = Buffer.from(m[2], 'base64');
-    res.setHeader('Content-Type', type);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', 'inline');
-    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('Content-Length', body.length);
-    return res.end(body);
-  } catch (e) {
-    console.error('Photo fetch error:', e);
-    res.status(500).send('Server error');
-  }
-});
-
 // Delete photo
 app.delete('/api/photos/:id', auth, async (req, res) => {
   try {
@@ -678,9 +614,7 @@ app.get('/api/history', auth, async (req, res) => {
 
     // Photos uploaded that day
     const photosRes = await pool.query(
-      'SELECT p.id, p.item_type, p.item_id, p.uploaded_by, p.uploaded_at, p.caption, '
-      + 'u.name AS uploader_name FROM photos p LEFT JOIN users u ON u.id = p.uploaded_by '
-      + 'WHERE p.uploaded_at >= $1 AND p.uploaded_at <= $2 ORDER BY p.uploaded_at',
+      'SELECT p.*, u.name AS uploader_name FROM photos p LEFT JOIN users u ON u.id = p.uploaded_by WHERE p.uploaded_at >= $1 AND p.uploaded_at <= $2 ORDER BY p.uploaded_at',
       [dayStart, dayEnd]
     );
 
@@ -718,7 +652,7 @@ app.get('/api/history', auth, async (req, res) => {
       id:         p.id,
       itemType:   p.item_type,
       itemId:     p.item_id,
-      url:        photoUrl(p.id),
+      data:       p.data,
       caption:    p.caption || '',
       uploadedBy: p.uploader_name || p.uploaded_by,
       uploadedAt: p.uploaded_at ? Number(p.uploaded_at) : null,
