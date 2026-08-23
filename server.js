@@ -146,18 +146,29 @@ async function initDB() {
       );
     `);
 
-    // Only insert default users if they do not already exist — never overwrite existing accounts
+    // Admin (u1): always ensure password is correct so admin can always log in
+    // All other default users: only insert if they don't exist — never overwrite staff passwords
     for (const u of DEFAULT_USERS) {
-      const exists = await client.query('SELECT 1 FROM users WHERE id=$1 LIMIT 1', [u.id]);
-      if (exists.rows.length === 0) {
-        const hash = await bcrypt.hash(u.password, 10);
+      const hash = await bcrypt.hash(u.password, 10);
+      if (u.id === 'u1') {
+        // Admin: upsert password only (never changes username/name/role)
         await client.query(
-          'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
+          `INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (id) DO UPDATE SET password=EXCLUDED.password`,
           [u.id, u.username, hash, u.name, u.role]
         );
+      } else {
+        // Staff: only insert if this user ID doesn't exist yet
+        const exists = await client.query('SELECT 1 FROM users WHERE id=$1 LIMIT 1', [u.id]);
+        if (exists.rows.length === 0) {
+          await client.query(
+            'INSERT INTO users (id,username,password,name,role) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
+            [u.id, u.username, hash, u.name, u.role]
+          );
+        }
       }
     }
-    console.log('✅ User accounts checked (existing accounts untouched)');
+    console.log('✅ User accounts checked (admin password ensured; staff accounts untouched)');
 
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
