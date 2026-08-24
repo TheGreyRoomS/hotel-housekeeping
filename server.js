@@ -711,22 +711,6 @@ app.delete('/api/admin/cleaning-logs', auth, requireRole('admin'), async (req, r
   }
 });
 
-// ONE-TIME: force-reset admin credentials (no auth required — remove after use)
-app.post('/api/fix-admin', async (req, res) => {
-  try {
-    const hash = await bcrypt.hash('admin123', 10);
-    await pool.query(`DELETE FROM users WHERE id='u1' OR username='admin'`);
-    await pool.query(
-      `INSERT INTO users (id,username,password,name,role) VALUES ('u1','admin',$1,'Admin','admin')`,
-      [hash]
-    );
-    res.json({ ok: true, message: 'Admin reset to admin/admin123' });
-  } catch (e) {
-    console.error('Fix admin error:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // ── CATCH-ALL → serve frontend ──────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -858,12 +858,15 @@ function renderIssues() {
     <div class="filter-row">
       <div class="filt${issueFilter==='open'?' active':''}" onclick="setFilter('open')">Open (${open})</div>
       <div class="filt${issueFilter==='all'?' active':''}" onclick="setFilter('all')">All (${all.length})</div>
+      ${open ? `<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:12px" onclick="printIssues()">🖨️ Print List</button>` : ''}
     </div>
     ${!filtered.length ? `<div class="empty"><div class="ei">✅</div><p>No ${issueFilter==='open'?'open ':''}issues!</p></div>` :
       filtered.map(iss => {
         const did = (isAreaId(iss.srcId)||iss.srcId==='other') ? `'${iss.srcId}'` : iss.srcId;
+        const isOpen = iss.status !== 'resolved';
         return `
         <div class="maint-card">
+          ${isOpen ? `<input type="checkbox" class="iss-chk" data-id="${iss.id}" data-loc="${iss.srcName}" data-desc="${iss.description.replace(/"/g,'&quot;')}" data-by="${getUserName(iss.reportedBy)}" data-date="${fmtDate(iss.reportedAt)}" data-status="${iss.status==='in_progress'?'In Progress':'Open'}" style="margin:4px 8px 0 0;flex-shrink:0;width:16px;height:16px;cursor:pointer">` : ''}
           <div class="src-badge">${iss.srcName}</div>
           <div class="mc-body">
             <div class="mc-title">${iss.description}</div>
@@ -882,6 +885,48 @@ function renderIssues() {
       }).join('')}`;
 }
 function setFilter(f) { issueFilter = f; renderView(); }
+
+function printIssues() {
+  const checkboxes = document.querySelectorAll('.iss-chk');
+  const selected = Array.from(checkboxes).filter(c => c.checked);
+  const items = selected.length
+    ? selected.map(c => ({ loc: c.dataset.loc, desc: c.dataset.desc, by: c.dataset.by, date: c.dataset.date, status: c.dataset.status }))
+    : Array.from(checkboxes).map(c => ({ loc: c.dataset.loc, desc: c.dataset.desc, by: c.dataset.by, date: c.dataset.date, status: c.dataset.status }));
+  if (!items.length) { toast('No open issues to print','info'); return; }
+  const w = window.open('','_blank','width=700,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><title>Maintenance Tasks</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:28px;color:#1e293b}
+    h1{font-size:20px;margin-bottom:4px}
+    .sub{font-size:13px;color:#64748b;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#f1f5f9;text-align:left;padding:8px 10px;border:1px solid #e2e8f0;font-weight:600}
+    td{padding:8px 10px;border:1px solid #e2e8f0;vertical-align:top}
+    tr:nth-child(even) td{background:#f8fafc}
+    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+    .open{background:#fef3c7;color:#92400e}
+    .ip{background:#eff6ff;color:#1d4ed8}
+    @media print{body{padding:10px}}
+  </style></head><body>
+  <h1>🔧 Maintenance Task List</h1>
+  <div class="sub">Printed ${new Date().toLocaleString()} · ${items.length} issue${items.length>1?'s':''}</div>
+  <table>
+    <tr><th>#</th><th>Location</th><th>Issue</th><th>Reported By</th><th>Date</th><th>Status</th><th>Done ✓</th></tr>
+    ${items.map((it,i)=>`<tr>
+      <td>${i+1}</td>
+      <td><strong>${it.loc}</strong></td>
+      <td>${it.desc}</td>
+      <td>${it.by}</td>
+      <td>${it.date}</td>
+      <td><span class="badge ${it.status==='In Progress'?'ip':'open'}">${it.status}</span></td>
+      <td></td>
+    </tr>`).join('')}
+  </table>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
 
 function renderAdmin() {
   const cls = {admin:'rb-admin',reception:'rb-reception',housekeeper:'rb-housekeeper',maintenance:'rb-maintenance'};
