@@ -144,6 +144,14 @@ async function initDB() {
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS supplies (
+        id           TEXT PRIMARY KEY,
+        description  TEXT NOT NULL,
+        requested_by TEXT,
+        requested_at BIGINT NOT NULL,
+        status       TEXT NOT NULL DEFAULT 'needed'
+      );
     `);
 
     // Admin (u1): always ensure password is correct so admin can always log in
@@ -376,19 +384,31 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/state', auth, async (req, res) => {
   try {
     const { rooms, areas } = await getFullState();
-    const [usersRes, otherIssuesRes] = await Promise.all([
+    const [usersRes, otherIssuesRes, suppliesRes] = await Promise.all([
       pool.query('SELECT id, name, role, username FROM users ORDER BY role, name'),
       pool.query(
         `SELECT i.*, u.name AS reporter_name FROM issues i
          LEFT JOIN users u ON u.id = i.reported_by
          WHERE i.item_type='other' ORDER BY i.reported_at`
       ),
+      pool.query(
+        `SELECT s.*, u.name AS requester_name FROM supplies s
+         LEFT JOIN users u ON u.id = s.requested_by
+         ORDER BY s.requested_at`
+      ),
     ]);
     const otherIssues = otherIssuesRes.rows.map(i => ({
       ...mapIssue(i),
       locationName: i.item_id,
     }));
-    res.json({ rooms, areas, users: usersRes.rows, otherIssues });
+    const supplies = suppliesRes.rows.map(s => ({
+      id:          s.id,
+      description: s.description,
+      requestedBy: s.requester_name || s.requested_by,
+      requestedAt: Number(s.requested_at),
+      status:      s.status,
+    }));
+    res.json({ rooms, areas, users: usersRes.rows, otherIssues, supplies });
   } catch (e) {
     console.error('State error:', e);
     res.status(500).json({ error: 'Server error' });
@@ -709,6 +729,35 @@ app.delete('/api/admin/cleaning-logs', auth, requireRole('admin'), async (req, r
     console.error('Clear logs error:', e);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// ── SUPPLIES ─────────────────────────────────────────────
+app.post('/api/supplies', auth, async (req, res) => {
+  try {
+    const { description } = req.body;
+    if (!description) return res.status(400).json({ error: 'Description required' });
+    const id = uid();
+    await pool.query(
+      'INSERT INTO supplies (id,description,requested_by,requested_at) VALUES ($1,$2,$3,$4)',
+      [id, description, req.user.id, Date.now()]
+    );
+    res.json({ id });
+  } catch (e) { console.error('Supply error:', e); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.patch('/api/supplies/:id', auth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    await pool.query('UPDATE supplies SET status=$1 WHERE id=$2', [status, req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/supplies/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM supplies WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── CATCH-ALL → serve frontend ──────────────────────────

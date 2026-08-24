@@ -395,7 +395,7 @@ const POLL_MS = 25000; // sync every 25 seconds
 // ═══════════════════════════════════════════════════════
 let token         = null;
 let currentUser   = null; // {id, name, role, username}
-let state         = { rooms: [], areas: [], users: [], otherIssues: [] };
+let state         = { rooms: [], areas: [], users: [], otherIssues: [], supplies: [] };
 let photoCache    = {};  // keyed by String(itemId), populated on demand
 let currentView   = 'overview';
 let currentItemId = null;
@@ -882,9 +882,107 @@ function renderIssues() {
             ` : ''}
           </div>
         </div>`;
-      }).join('')}`;
+      }).join('')}
+
+    ${renderSupplies()}`;
 }
 function setFilter(f) { issueFilter = f; renderView(); }
+
+function renderSupplies() {
+  const supplies = state.supplies || [];
+  const needed   = supplies.filter(s => s.status === 'needed');
+  const bought   = supplies.filter(s => s.status === 'purchased');
+  const canAdd   = isMaint() || isAdmin();
+  const canTick  = isAdmin() || isReception();
+  return `
+    <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:16px">
+      <div class="pg-hdr" style="margin-bottom:10px">
+        <div><div class="pg-title" style="font-size:16px">🛒 Supplies Needed</div><div class="pg-sub">${needed.length} item${needed.length!==1?'s':''} needed</div></div>
+        ${canAdd ? `<button class="btn btn-ghost btn-sm" onclick="openAddSupply()">+ Add Item</button>` : ''}
+      </div>
+      ${!supplies.length ? `<div style="font-size:13px;color:var(--muted);padding:8px 0">No supplies requested.</div>` : ''}
+      ${needed.map(s => `
+        <div class="maint-card" style="align-items:center">
+          ${canTick ? `<input type="checkbox" style="width:18px;height:18px;margin-right:10px;flex-shrink:0;cursor:pointer" onchange="doToggleSupply('${s.id}',this.checked)">` : ''}
+          <div class="mc-body" style="flex:1">
+            <div class="mc-title">${s.description}</div>
+            <div class="mc-meta">Requested by ${s.requestedBy} · ${fmtDate(s.requestedAt)}</div>
+          </div>
+          ${canAdd ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;color:#ef4444" onclick="doDeleteSupply('${s.id}')">✕</button>` : ''}
+        </div>`).join('')}
+      ${bought.length ? `
+        <div style="margin-top:12px;font-size:12px;color:var(--muted);font-weight:600">PURCHASED</div>
+        ${bought.map(s => `
+          <div class="maint-card" style="opacity:0.5;align-items:center">
+            ${canTick ? `<input type="checkbox" checked style="width:18px;height:18px;margin-right:10px;flex-shrink:0;cursor:pointer" onchange="doToggleSupply('${s.id}',this.checked)">` : ''}
+            <div class="mc-body" style="flex:1;text-decoration:line-through">
+              <div class="mc-title">${s.description}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;color:#ef4444" onclick="doDeleteSupply('${s.id}')">✕</button>
+          </div>`).join('')}
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:12px" onclick="doClearPurchased()">Clear Purchased</button>
+      ` : ''}
+    </div>`;
+}
+
+function openAddSupply() {
+  const w = document.createElement('div');
+  w.id = 'supply-wrapper';
+  w.innerHTML = `
+    <div class="overlay" onclick="if(event.target===this)closeExtra('supply-wrapper')">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:400px">
+        <div class="modal-hdr"><div class="modal-title">🛒 Add Supply Item</div><button class="modal-close" onclick="closeExtra('supply-wrapper')">✕</button></div>
+        <div class="modal-body">
+          <div class="fg"><label>Item needed</label><textarea id="sup-desc" placeholder="e.g. Cleaning gloves, Bleach 5L…" rows="3"></textarea></div>
+          <div id="sup-err" class="err hidden"></div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="closeExtra('supply-wrapper')">Cancel</button>
+          <button class="btn btn-primary" onclick="doAddSupply()">Add Item</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(w);
+  setTimeout(() => document.getElementById('sup-desc')?.focus(), 50);
+}
+
+async function doAddSupply() {
+  const desc  = document.getElementById('sup-desc')?.value?.trim();
+  const errEl = document.getElementById('sup-err');
+  if (!desc) { errEl.textContent='Please describe the item.'; errEl.classList.remove('hidden'); return; }
+  try {
+    await api('/api/supplies', { method:'POST', body:{ description:desc } });
+    await syncState(true);
+    closeExtra('supply-wrapper');
+    toast('Supply item added','info');
+    renderView();
+  } catch(e) { errEl.textContent=e.message; errEl.classList.remove('hidden'); }
+}
+
+async function doToggleSupply(id, checked) {
+  try {
+    await api(`/api/supplies/${id}`, { method:'PATCH', body:{ status: checked ? 'purchased' : 'needed' } });
+    await syncState(true);
+    renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doDeleteSupply(id) {
+  try {
+    await api(`/api/supplies/${id}`, { method:'DELETE' });
+    await syncState(true);
+    renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function doClearPurchased() {
+  const purchased = (state.supplies||[]).filter(s=>s.status==='purchased');
+  try {
+    await Promise.all(purchased.map(s => api(`/api/supplies/${s.id}`, { method:'DELETE' })));
+    await syncState(true);
+    renderView();
+  } catch(e) { toast(e.message,'error'); }
+}
 
 function printIssues() {
   const checkboxes = document.querySelectorAll('.iss-chk');
