@@ -1275,7 +1275,22 @@ function triggerUpload(id, ctx) {
       delete photoCache[String(id)];
       await syncState(true);
       toast(`${files.length} photo${files.length>1?'s':''} uploaded 📷`, 'success');
-      if (ctx === 'modal') openItemModal(id); else renderView();
+      if (ctx === 'modal') {
+        openItemModal(id);
+      } else {
+        // Reload photos in-place so the HK card stays expanded
+        const sid = String(id).replace(/\W/g,'_');
+        const grid = document.getElementById(`ph-${sid}`);
+        if (grid) {
+          const did = isAreaId(id) ? `'${id}'` : id;
+          loadPhotosFor(id).then(photos => {
+            grid.innerHTML = renderPhotoGrid(photos, id) +
+              `<div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>`;
+          });
+        } else {
+          renderView();
+        }
+      }
     } catch(e) { toast(e.message,'error'); }
     finally { loading(false); }
   });
