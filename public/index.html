@@ -838,9 +838,9 @@ function renderAllSpaces() {
       ${['dirty','cleaning','inspection','clean'].map(s=>`<div class="stat-card sc-${s}"><div class="stat-val">${cnt(s)}</div><div class="stat-lbl">${STATUS_LABEL[s]}</div></div>`).join('')}
     </div>
     <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms</div><div class="sec-div-line"></div></div>
-    <div class="cards-grid">${state.rooms.map(r=>`<div class="item-card s-${r.status}" style="cursor:default"><div class="ic-top"><div class="ic-name">Room ${r.id}</div><div class="sbadge sb-${r.status}">${STATUS_LABEL[r.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${getAssignedNames(r)||'Unassigned'}</div></div><div class="ic-bar s-${r.status}"></div></div>`).join('')}</div>
+    <div class="cards-grid">${state.rooms.map(r=>`<div class="item-card s-${r.status}" onclick="openItemModal(${r.id})"><div class="ic-top"><div class="ic-name">Room ${r.id}</div><div class="sbadge sb-${r.status}">${STATUS_LABEL[r.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${getAssignedNames(r)||'Unassigned'}</div></div><div class="ic-bar s-${r.status}"></div></div>`).join('')}</div>
     <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Areas</div><div class="sec-div-line"></div></div>
-    <div class="cards-grid">${state.areas.map(a=>`<div class="item-card s-${a.status} area-card" style="cursor:default"><div class="ic-top"><div class="ic-name area-name">${a.icon} ${a.name}</div><div class="sbadge sb-${a.status}">${STATUS_LABEL[a.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${getAssignedNames(a)||'Unassigned'}</div></div><div class="ic-bar s-${a.status}"></div></div>`).join('')}`;
+    <div class="cards-grid">${state.areas.map(a=>`<div class="item-card s-${a.status} area-card" onclick="openItemModal('${a.id}')"><div class="ic-top"><div class="ic-name area-name">${a.icon} ${a.name}</div><div class="sbadge sb-${a.status}">${STATUS_LABEL[a.status]}</div></div><div class="ic-body"><div class="ic-info"><span>🧹</span>${getAssignedNames(a)||'Unassigned'}</div></div><div class="ic-bar s-${a.status}"></div></div>`).join('')}`;
 }
 
 function renderIssues() {
