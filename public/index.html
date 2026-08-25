@@ -746,7 +746,7 @@ function renderAssignments() {
     const names = getAssignedNames(item);
     return `
       <div class="assign-card${ia?' area-ac':''}">
-        <div class="ac-top">
+        <div class="ac-top" onclick="openItemModal(${did})" style="cursor:pointer">
           <div class="ac-name">${ia ? `${item.icon} ${item.name}` : `Room ${item.id}`}</div>
           <div class="sbadge sb-${item.status}">${STATUS_LABEL[item.status]}</div>
         </div>
