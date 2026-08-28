@@ -70,6 +70,7 @@ const DEFAULT_USERS = [
   { id: 'u5', username: 'hk2',          password: 'pass123',  role: 'housekeeper', name: 'Anna'   },
   { id: 'u6', username: 'hk3',          password: 'pass123',  role: 'housekeeper', name: 'Sofia'  },
   { id: 'u7', username: 'maintenance',  password: 'pass123',  role: 'maintenance', name: 'John'   },
+  { id: 'u8', username: 'moses',        password: 'pass123',  role: 'housekeeper', name: 'Moses'  },
 ];
 
 // ── DATABASE INIT ───────────────────────────────────────

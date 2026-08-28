@@ -403,6 +403,7 @@ let timerInterval = null;
 let pollInterval  = null;
 let photoTarget   = null; // {id, ctx:'modal'|'hk'}
 let issueFilter   = 'open';
+let historyDate   = null; // persisted so re-renders don't jump back to today
 
 // ═══════════════════════════════════════════════════════
 //  API HELPERS
@@ -1232,7 +1233,8 @@ async function doNotes(id) {
     const notes = document.getElementById('modal-notes').value;
     const type  = isAreaId(id) ? 'areas' : 'rooms';
     await api(`/api/${type}/${id}`, { method:'PATCH', body:{ notes } });
-    toast('Notes saved','success');
+    const item = findItem(id); if (item) item.notes = notes; // update instantly, no full sync
+    toast('Notes saved ✓','success');
   } catch(e) { toast(e.message,'error'); }
 }
 
@@ -1242,8 +1244,8 @@ async function doHKNotes(id, sid) {
     const notes = document.getElementById(`hk-notes-${sid}`).value;
     const type  = isAreaId(id) ? 'areas' : 'rooms';
     await api(`/api/${type}/${id}`, { method:'PATCH', body:{ notes } });
-    await syncState(true);
-    toast('Notes saved','success');
+    const item = findItem(id); if (item) item.notes = notes; // update instantly, no full sync
+    toast('Notes saved ✓','success');
   } catch(e) { toast(e.message,'error'); }
 }
 
@@ -1573,7 +1575,7 @@ function renderHistoryShell() {
       <div><div class="pg-title">📅 History</div><div class="pg-sub">Cleaning logs, minibar photos & maintenance issues by day</div></div>
     </div>
     <div class="hist-date-bar">
-      <input type="date" id="hist-date" value="${todayStr()}" max="${todayStr()}" onchange="loadHistory()">
+      <input type="date" id="hist-date" value="${historyDate||todayStr()}" max="${todayStr()}" onchange="historyDate=this.value;loadHistory()">
       <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↺ Load</button>
       <button class="btn btn-ghost btn-sm" onclick="loadAllIssues()">📋 All Issues Log</button>
     </div>
@@ -1590,6 +1592,7 @@ async function loadHistory() {
   const dateEl = document.getElementById('hist-date');
   if (!dateEl) return;
   const date = dateEl.value || todayStr();
+  historyDate = date; // persist so re-render doesn't reset it
   const cont = document.getElementById('hist-content');
   if (!cont) return;
   cont.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
