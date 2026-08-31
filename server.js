@@ -227,12 +227,13 @@ async function runDailyResetIfNeeded(client) {
   }
   await client.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
   await client.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+  await client.query(`DELETE FROM photos WHERE item_type IN ('room','area')`);
   await client.query(
     `INSERT INTO settings (key,value) VALUES ('last_reset_date',$1)
      ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
     [todayUTC]
   );
-  console.log(`🔄 Daily reset done for ${todayUTC}`);
+  console.log(`🔄 Daily reset done for ${todayUTC} — rooms, areas, photos cleared`);
 }
 
 // ── HELPERS ─────────────────────────────────────────────
@@ -307,7 +308,7 @@ async function getFullState() {
   return { rooms, areas };
 }
 
-// Photos on demand (keeps photos out of every state poll to save bandwidth)
+// Photos on demand — room/area photos reset at 2am daily (same as status/assignments)
 app.get('/api/photos/:itemType/:itemId', auth, async (req, res) => {
   try {
     const { itemType, itemId } = req.params;
@@ -340,12 +341,13 @@ function scheduleDailyReset() {
       const todayUTC = new Date().toISOString().slice(0, 10);
       await pool.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
       await pool.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
+      await pool.query(`DELETE FROM photos WHERE item_type IN ('room','area')`);
       await pool.query(
         `INSERT INTO settings (key,value) VALUES ('last_reset_date',$1)
          ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
         [todayUTC]
       );
-      console.log('🔄 Daily reset done — all rooms and areas unassigned');
+      console.log('🔄 Daily reset done — rooms, areas, photos cleared');
     } catch (e) {
       console.error('❌ Daily reset error:', e);
     }
