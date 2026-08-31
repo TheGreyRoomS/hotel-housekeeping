@@ -952,8 +952,8 @@ async function doAddSupply() {
   const errEl = document.getElementById('sup-err');
   if (!desc) { errEl.textContent='Please describe the item.'; errEl.classList.remove('hidden'); return; }
   try {
-    await api('/api/supplies', { method:'POST', body:{ description:desc } });
-    await syncState(true);
+    const res = await api('/api/supplies', { method:'POST', body:{ description:desc } });
+    state.supplies = [...(state.supplies||[]), { id: res.id, description: desc, status:'needed', requestedBy: currentUser.id, requestedAt: Date.now() }];
     closeExtra('supply-wrapper');
     toast('Supply item added','info');
     renderView();
@@ -963,7 +963,7 @@ async function doAddSupply() {
 async function doToggleSupply(id, checked) {
   try {
     await api(`/api/supplies/${id}`, { method:'PATCH', body:{ status: checked ? 'purchased' : 'needed' } });
-    await syncState(true);
+    const s = (state.supplies||[]).find(s=>s.id===id); if(s) s.status = checked ? 'purchased' : 'needed';
     renderView();
   } catch(e) { toast(e.message,'error'); }
 }
@@ -971,7 +971,7 @@ async function doToggleSupply(id, checked) {
 async function doDeleteSupply(id) {
   try {
     await api(`/api/supplies/${id}`, { method:'DELETE' });
-    await syncState(true);
+    state.supplies = (state.supplies||[]).filter(s=>s.id!==id);
     renderView();
   } catch(e) { toast(e.message,'error'); }
 }
@@ -980,7 +980,7 @@ async function doClearPurchased() {
   const purchased = (state.supplies||[]).filter(s=>s.status==='purchased');
   try {
     await Promise.all(purchased.map(s => api(`/api/supplies/${s.id}`, { method:'DELETE' })));
-    await syncState(true);
+    state.supplies = (state.supplies||[]).filter(s=>s.status!=='purchased');
     renderView();
   } catch(e) { toast(e.message,'error'); }
 }
@@ -1185,11 +1185,10 @@ async function doAssign(id, userId, checked) {
       current = current.filter(u => u !== userId);
     }
     await api(`/api/${type}/${id}`, { method:'PATCH', body:{ assignedTo: current } });
-    await syncState(true);
-    const updatedItem = findItem(id);
-    const names = getAssignedNames(updatedItem);
-    toast(names ? `${itemName(updatedItem)} → ${names}` : `${itemName(updatedItem)} unassigned`, 'info');
-    renderView(); // always refresh overview cards
+    if (item) item.assignedTo = current; // instant local update — no full sync
+    const names = getAssignedNames(item);
+    toast(names ? `${itemName(item)} → ${names}` : `${itemName(item)} unassigned`, 'info');
+    renderView();
     if (currentItemId !== null) openItemModal(id);
   } catch(e) { toast(e.message,'error'); }
 }
@@ -1202,8 +1201,8 @@ async function doStatus(id, status) {
     if (item.status==='cleaning' && status!=='cleaning' && !item.cleaningEnd) { body.cleaningEnd=Date.now(); }
     const type = isAreaId(id) ? 'areas' : 'rooms';
     await api(`/api/${type}/${id}`, { method:'PATCH', body });
-    await syncState(true);
-    toast(`${itemName(findItem(id))} → ${STATUS_FULL[status]}`, 'success');
+    if (item) Object.assign(item, body); // instant local update — no full sync
+    toast(`${itemName(item)} → ${STATUS_FULL[status]}`, 'success');
     openItemModal(id);
   } catch(e) { toast(e.message,'error'); }
 }
@@ -1211,8 +1210,9 @@ async function doStatus(id, status) {
 async function doStart(id) {
   try {
     const type = isAreaId(id) ? 'areas' : 'rooms';
-    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ status:'cleaning', cleaningStart:Date.now(), cleaningEnd:null } });
-    await syncState(true);
+    const body = { status:'cleaning', cleaningStart:Date.now(), cleaningEnd:null };
+    await api(`/api/${type}/${id}`, { method:'PATCH', body });
+    const item = findItem(id); if (item) Object.assign(item, body); // instant local update
     toast(`${itemName(findItem(id))}: Cleaning started ▶`, 'success');
     renderView();
   } catch(e) { toast(e.message,'error'); }
@@ -1221,8 +1221,9 @@ async function doStart(id) {
 async function doEnd(id) {
   try {
     const type = isAreaId(id) ? 'areas' : 'rooms';
-    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ status:'inspection', cleaningEnd:Date.now() } });
-    await syncState(true);
+    const body = { status:'inspection', cleaningEnd:Date.now() };
+    await api(`/api/${type}/${id}`, { method:'PATCH', body });
+    const item = findItem(id); if (item) Object.assign(item, body); // instant local update
     toast(`${itemName(findItem(id))}: Done — ready for inspection ✓`, 'success');
     renderView();
   } catch(e) { toast(e.message,'error'); }
@@ -1275,7 +1276,6 @@ function triggerUpload(id, ctx) {
         await api('/api/photos', { method:'POST', body:{ itemType, itemId:id, data, caption:file.name } });
       }
       delete photoCache[String(id)];
-      await syncState(true);
       toast(`${files.length} photo${files.length>1?'s':''} uploaded 📷`, 'success');
       if (ctx === 'modal') {
         openItemModal(id);
@@ -1304,7 +1304,6 @@ async function doDelPhoto(id, photoId, e) {
   try {
     await api(`/api/photos/${photoId}`, { method:'DELETE' });
     delete photoCache[String(id)];
-    await syncState(true);
     toast('Photo deleted','info');
     if (currentItemId !== null) openItemModal(id); else renderView();
   } catch(e) { toast(e.message,'error'); }
@@ -1351,8 +1350,10 @@ async function doAddIssue(id) {
   if (!desc) { const e=document.getElementById('iss-err'); e.textContent='Please describe the issue.'; e.classList.remove('hidden'); return; }
   try {
     const itemType = isAreaId(id) ? 'area' : 'room';
-    await api('/api/issues', { method:'POST', body:{ itemType, itemId:id, description:desc } });
-    await syncState(true);
+    const res = await api('/api/issues', { method:'POST', body:{ itemType, itemId:id, description:desc } });
+    const item = findItem(id);
+    if (item) item.maintenanceIssues = [...(item.maintenanceIssues||[]),
+      { id: res.id, description: desc, reportedBy: currentUser.id, reportedAt: Date.now(), status:'open', resolveNote:'', resolvedAt:null }];
     closeExtra('issue-wrapper');
     toast('Issue reported 🔧','info');
     if (currentItemId !== null) openItemModal(id); else renderView();
@@ -1414,8 +1415,10 @@ async function doAddIssueGlobal() {
     itemId = customLoc;
   }
   try {
-    await api('/api/issues', { method:'POST', body:{ itemType, itemId, description:desc } });
-    await syncState(true);
+    const res = await api('/api/issues', { method:'POST', body:{ itemType, itemId, description:desc } });
+    const newIss = { id: res.id, description: desc, reportedBy: currentUser.id, reportedAt: Date.now(), status:'open', resolveNote:'', resolvedAt:null };
+    if (itemType === 'area') { const a = state.areas.find(a=>a.id===itemId); if(a) a.maintenanceIssues=[...(a.maintenanceIssues||[]),newIss]; }
+    else { state.otherIssues = [...(state.otherIssues||[]), { ...newIss, locationName: itemId }]; }
     closeExtra('issue-global-wrapper');
     toast('Issue added 🔧','info');
     renderView();
@@ -1425,7 +1428,8 @@ async function doAddIssueGlobal() {
 async function doIssueStatus(id, issueId, status) {
   try {
     await api(`/api/issues/${issueId}`, { method:'PATCH', body:{ status } });
-    await syncState(true);
+    const item = findItem(id);
+    if (item) { const iss=(item.maintenanceIssues||[]).find(i=>i.id===issueId); if(iss) iss.status=status; }
     toast(`Issue: ${status==='in_progress'?'In Progress':'Updated'}`, 'success');
     if (currentItemId !== null) openItemModal(id); else renderView();
   } catch(e) { toast(e.message,'error'); }
@@ -1456,7 +1460,8 @@ async function doResolve(id, issueId) {
   const note = (document.getElementById('res-note')||{}).value?.trim() || '';
   try {
     await api(`/api/issues/${issueId}`, { method:'PATCH', body:{ status:'resolved', resolveNote:note } });
-    await syncState(true);
+    const item = findItem(id);
+    if (item) { const iss=(item.maintenanceIssues||[]).find(i=>i.id===issueId); if(iss){ iss.status='resolved'; iss.resolveNote=note; iss.resolvedAt=Date.now(); } }
     closeExtra('resolve-wrapper');
     toast('Issue resolved ✓','success');
     if (currentItemId !== null) openItemModal(id); else renderView();
