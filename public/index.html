@@ -1781,7 +1781,7 @@ async function loadStocktakeList() {
   if (!wrap) return;
   wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Loading…</div>';
   try {
-    const list = await api('GET','/api/stocktakes');
+    const list = await api('/api/stocktakes');
     if (!list.length) {
       wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted)">No stock takes yet. Press <b>+ New Stock Take</b> to begin.</div>';
       return;
@@ -1808,7 +1808,7 @@ async function loadStocktakeList() {
 
 async function openNewStocktake() {
   let items;
-  try { items = await api('GET','/api/stocktakes/template'); }
+  try { items = await api('/api/stocktakes/template'); }
   catch(e) { toast('Could not load template','error'); return; }
 
   const today = new Date().toISOString().slice(0,10);
@@ -1857,7 +1857,7 @@ async function openNewStocktake() {
 
 async function openStocktakeView(id) {
   let st;
-  try { st = await api('GET',`/api/stocktakes/${id}`); }
+  try { st = await api(`/api/stocktakes/${id}`); }
   catch(e) { toast('Could not load stock take','error'); return; }
 
   const isEditable = !st.completed || isAdmin() || isSupervisor();
@@ -2027,11 +2027,11 @@ async function saveStocktake(complete) {
   if (!date) { toast('Please enter a date','error'); return; }
   const items = collectStItems();
   try {
-    const r = await api('POST','/api/stocktakes',{
+    const r = await api('/api/stocktakes',{ method:'POST', body:{
       type, date, conducted_by: by, checked_by: checked, items
-    });
+    }});
     if (complete) {
-      await api('PUT',`/api/stocktakes/${r.id}`,{ completed: 1 });
+      await api(`/api/stocktakes/${r.id}`,{ method:'PUT', body:{ completed: 1 }});
     }
     closeExtra('st-modal-wrap');
     toast(complete ? 'Stock take completed ✓' : 'Draft saved','info');
@@ -2046,10 +2046,10 @@ async function updateStocktake(id, complete) {
   const checked = document.getElementById('st-checked')?.value || '';
   const items = collectStItems();
   try {
-    await api('PUT',`/api/stocktakes/${id}`,{
+    await api(`/api/stocktakes/${id}`,{ method:'PUT', body:{
       type, date, conducted_by: by, checked_by: checked,
       completed: complete ? 1 : undefined, items
-    });
+    }});
     closeExtra('st-modal-wrap');
     toast(complete ? 'Stock take completed ✓' : 'Saved','info');
     loadStocktakeList();
@@ -2079,7 +2079,7 @@ async function downloadStocktake(id, type, date) {
 async function deleteStocktake(id) {
   if (!confirm('Delete this stock take permanently?')) return;
   try {
-    await api('DELETE',`/api/stocktakes/${id}`);
+    await api(`/api/stocktakes/${id}`,{ method:'DELETE' });
     toast('Deleted','info');
     loadStocktakeList();
   } catch(e) { toast('Error deleting','error'); }
