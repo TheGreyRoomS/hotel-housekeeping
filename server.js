@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const path     = require('path');
+const XLSX     = require('xlsx');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -153,7 +154,116 @@ async function initDB() {
         requested_at BIGINT NOT NULL,
         status       TEXT NOT NULL DEFAULT 'needed'
       );
+
+      CREATE TABLE IF NOT EXISTS stocktakes (
+        id           TEXT PRIMARY KEY,
+        type         TEXT NOT NULL,
+        date         TEXT NOT NULL,
+        conducted_by TEXT DEFAULT '',
+        checked_by   TEXT DEFAULT '',
+        created_at   BIGINT NOT NULL,
+        completed    INTEGER DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS stocktake_items (
+        id             TEXT PRIMARY KEY,
+        stocktake_id   TEXT NOT NULL,
+        category       TEXT NOT NULL,
+        item_name      TEXT NOT NULL,
+        unit           TEXT DEFAULT 'pcs',
+        fields         TEXT DEFAULT 'linen',
+        opening_stock  TEXT DEFAULT '',
+        in_rooms       TEXT DEFAULT '',
+        at_laundry     TEXT DEFAULT '',
+        in_storeroom   TEXT DEFAULT '',
+        damaged        TEXT DEFAULT '',
+        closing_stock  TEXT DEFAULT '',
+        notes          TEXT DEFAULT ''
+      );
     `);
+
+    // Migration: add notes column to cleaning_logs for existing DBs
+    await client.query(`ALTER TABLE cleaning_logs ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`);
+
+    // Seed initial stock-take reference from September 2026 (opening stock for Oct 2026)
+    const seedCheck = await client.query(`SELECT id FROM stocktakes WHERE id='sept2026-seed'`);
+    if (!seedCheck.rows.length) {
+      await client.query(
+        `INSERT INTO stocktakes (id,type,date,conducted_by,checked_by,created_at,completed)
+         VALUES ('sept2026-seed','monthly','2026-09-30','Marthe','',${Date.now()},1)`
+      );
+      const seedItems = [
+        ['Guest Amenities','Shower Gel','pcs','amenity','1','','','','','1'],
+        ['Guest Amenities','Conditioner / Shampoo','pcs','amenity','2','','','','','2'],
+        ['Guest Amenities','Handwash','pcs','amenity','5','','','','','5'],
+        ['Guest Amenities','Lotion','pcs','amenity','10','','','','','10'],
+        ['Linen – Towels','Bath Towel','pcs','linen','47','26','18','','3','47'],
+        ['Linen – Towels','Hand Towel','pcs','linen','42','26','15','','1','42'],
+        ['Linen – Towels','Bath Mat','pcs','linen','21','13','7','','1','21'],
+        ['Linen – Duvet Inners','Super King Duvet Inner','pcs','linen','3','2','','1','','3'],
+        ['Linen – Duvet Inners','King Duvet Inner','pcs','linen','10','3','','2','','5'],
+        ['Linen – Duvet Inners','Queen Duvet Inner','pcs','linen','3','8','','1','','9'],
+        ['Linen – Duvet Inners','Double Duvet Inner','pcs','linen','1','0','','1','','1'],
+        ['Linen – Duvet Inners','Single Duvet Inner','pcs','linen','8','','','','',''],
+        ['Linen – Duvet Covers','Super King Duvet Cover','pcs','linen','3','2','1','','1','4'],
+        ['Linen – Duvet Covers','King Duvet Cover','pcs','linen','15','7','6','','2','15'],
+        ['Linen – Duvet Covers','Queen Duvet Cover','pcs','linen','14','4','2','','6','12'],
+        ['Linen – Duvet Covers','Single Duvet Cover','pcs','linen','8','0','8','','','8'],
+        ['Linen – Fitted Sheets','Super King Fitted Sheet','pcs','linen','4','2','1','','1','4'],
+        ['Linen – Fitted Sheets','King Fitted Sheet','pcs','linen','2','1','1','','','2'],
+        ['Linen – Fitted Sheets','Queen Fitted Sheet','pcs','linen','15','8','7','','','15'],
+        ['Linen – Fitted Sheets','Double Fitted Sheet','pcs','linen','2','2','0','','','2'],
+        ['Linen – Fitted Sheets','Single Fitted Sheet','pcs','linen','1','0','0','1','','1'],
+        ['Linen – Mattress Protectors','Super King Mattress Protector','pcs','linen','4','2','','2','',''],
+        ['Linen – Mattress Protectors','Queen Mattress Protector','pcs','linen','11','8','','3','','11'],
+        ['Linen – Mattress Protectors','Double Mattress Protector','pcs','linen','3','2','','1','','3'],
+        ['Linen – Pillows & Cases','Continental Pillow Case','pcs','linen','33','24','5','','4','33'],
+        ['Linen – Pillows & Cases','Standard Pillow Case','pcs','linen','48','28','12','','7','47'],
+        ['Linen – Pillows & Cases','Continental Pillow Protector','pcs','linen','0','0','','','','0'],
+        ['Linen – Pillows & Cases','Standard Pillow Protector','pcs','linen','30','28','','2','','30'],
+        ['Linen – Pillows & Cases','Standard Pillow','pcs','linen','','28','','','',''],
+        ['Linen – Pillows & Cases','Continental Pillow','pcs','linen','','24','','','',''],
+        ['Pool & Other Linen','Pool Towels','pcs','linen','10','','6','11','17',''],
+        ['Pool & Other Linen','Maroon Fleece','pcs','linen','3','','','3','','3'],
+        ['Pool & Other Linen','New Small Fleeces','pcs','linen','8','','','7','','8'],
+        ['Pool & Other Linen','Laundry Bags','pcs','linen','9','','','9','',''],
+        ['Stationery','White Bin Bags','pcs','store','','','','0','',''],
+        ['Stationery','White Bin Liners','pcs','store','','','','0','',''],
+        ['Stationery','White Note Books','pcs','store','','','','','',''],
+        ['Stationery','Pencils','pcs','store','','','','2','',''],
+        ['Stationery','Toilet Roll Stickers','pcs','store','','','','1197','',''],
+        ['Stationery','Welcome Cards','pcs','store','','','','180','',''],
+        ['Other','Umbrellas','pcs','store','','','','9','',''],
+        ['Chemicals','Chop Chop','btl','store','','','','3','',''],
+        ['Chemicals','Steri','btl','store','','','','4.5','',''],
+        ['Chemicals','Window Clean','btl','store','','','','6','',''],
+        ['Chemicals','Ordorex','btl','store','','','','4','',''],
+        ['Equipment','Iron','pcs','store','','','','2','',''],
+        ['Equipment','Ironing Board','pcs','store','','','','2','',''],
+        ['Coffee & Tea Station','Coffee Machines','pcs','store','','','','5','',''],
+        ['Coffee & Tea Station','Cups','pcs','store','','','','187','',''],
+        ['Coffee & Tea Station','Lids','pcs','store','','','','231','',''],
+        ['Coffee & Tea Station','Stirrers','kg','store','','','','0.625','',''],
+        ['Coffee & Tea Station','Sugar Sachets','kg','store','','','','3.45','',''],
+        ['Coffee & Tea Station','Sweetener Sachets','kg','store','','','','1.095','',''],
+        ['Coffee & Tea Station','Milk Pods','pcs','store','','','','85','',''],
+        ['Coffee & Tea Station','Coffee – Decaf','pcs','store','','','','92','',''],
+        ['Coffee & Tea Station','Coffee – House Brand','pcs','store','','','','23','',''],
+        ['Coffee & Tea Station','Cleaning Pods','pcs','store','','','','27','',''],
+        ['Coffee & Tea Station','Display Boxes','pcs','store','','','','5','',''],
+        ['Coffee & Tea Station','Earl Grey','pcs','store','','','','14','',''],
+        ['Coffee & Tea Station','English Breakfast Tea','pcs','store','','','','21','',''],
+        ['Coffee & Tea Station','Chamomile','pcs','store','','','','','',''],
+      ];
+      for (const [cat,name,unit,fields,opening,rooms,laundry,storeroom,damaged,closing] of seedItems) {
+        await client.query(
+          `INSERT INTO stocktake_items (id,stocktake_id,category,item_name,unit,fields,opening_stock,in_rooms,at_laundry,in_storeroom,damaged,closing_stock)
+           VALUES ($1,'sept2026-seed',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [uid(), cat, name, unit, fields, opening, rooms, laundry, storeroom, damaged, closing]
+        );
+      }
+      console.log('✅ Seeded September 2026 stock-take reference data');
+    }
 
     // Admin (u1): always ensure password is correct so admin can always log in
     // All other default users: only insert if they don't exist — never overwrite staff passwords
@@ -227,13 +337,14 @@ async function runDailyResetIfNeeded(client) {
   }
   await client.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
   await client.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
-  await client.query(`DELETE FROM photos WHERE item_type IN ('room','area')`);
+  const fourteenDaysAgo = Date.now() - (14 * 24 * 60 * 60 * 1000);
+  await client.query(`DELETE FROM photos WHERE item_type IN ('room','area') AND uploaded_at < $1`, [fourteenDaysAgo]);
   await client.query(
     `INSERT INTO settings (key,value) VALUES ('last_reset_date',$1)
      ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
     [todayUTC]
   );
-  console.log(`🔄 Daily reset done for ${todayUTC} — rooms, areas, photos cleared`);
+  console.log(`🔄 Daily reset done for ${todayUTC} — rooms, areas cleared; photos older than 14 days deleted`);
 }
 
 // ── HELPERS ─────────────────────────────────────────────
@@ -341,13 +452,14 @@ function scheduleDailyReset() {
       const todayUTC = new Date().toISOString().slice(0, 10);
       await pool.query(`UPDATE rooms SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
       await pool.query(`UPDATE areas SET status='dirty', assigned_to=NULL, cleaning_start=NULL, cleaning_end=NULL, notes=''`);
-      await pool.query(`DELETE FROM photos WHERE item_type IN ('room','area')`);
+      const fourteenDaysAgo = Date.now() - (14 * 24 * 60 * 60 * 1000);
+      await pool.query(`DELETE FROM photos WHERE item_type IN ('room','area') AND uploaded_at < $1`, [fourteenDaysAgo]);
       await pool.query(
         `INSERT INTO settings (key,value) VALUES ('last_reset_date',$1)
          ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`,
         [todayUTC]
       );
-      console.log('🔄 Daily reset done — rooms, areas, photos cleared');
+      console.log('🔄 Daily reset done — rooms, areas cleared; photos older than 14 days deleted');
     } catch (e) {
       console.error('❌ Daily reset error:', e);
     }
@@ -426,7 +538,7 @@ app.patch('/api/rooms/:id', auth, async (req, res) => {
     // Fetch current row BEFORE update so we get cleaning_start
     let prevRow = null;
     if (cleaningEnd) {
-      const cur = await pool.query('SELECT cleaning_start, assigned_to FROM rooms WHERE id=$1', [id]);
+      const cur = await pool.query('SELECT cleaning_start, assigned_to, notes FROM rooms WHERE id=$1', [id]);
       prevRow = cur.rows[0] || null;
     }
     const parts = [], vals = [];
@@ -449,8 +561,8 @@ app.patch('/api/rooms/:id', auth, async (req, res) => {
       const start = prevRow?.cleaning_start ? Number(prevRow.cleaning_start) : null;
       const who   = req.user.id; // person who triggered the end
       await pool.query(
-        'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [uid(), 'room', String(id), `Room ${id}`, who, start, cleaningEnd, start ? cleaningEnd - start : null]
+        'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms,notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [uid(), 'room', String(id), `Room ${id}`, who, start, cleaningEnd, start ? cleaningEnd - start : null, prevRow?.notes || '']
       );
     }
     res.json({ ok: true });
@@ -468,7 +580,7 @@ app.patch('/api/areas/:id', auth, async (req, res) => {
     // Fetch current row BEFORE update so we get cleaning_start
     let prevRow = null;
     if (cleaningEnd) {
-      const cur = await pool.query('SELECT cleaning_start, assigned_to, name FROM areas WHERE id=$1', [id]);
+      const cur = await pool.query('SELECT cleaning_start, assigned_to, name, notes FROM areas WHERE id=$1', [id]);
       prevRow = cur.rows[0] || null;
     }
     const parts = [], vals = [];
@@ -491,8 +603,8 @@ app.patch('/api/areas/:id', auth, async (req, res) => {
       const who      = req.user.id; // person who triggered the end
       const areaName = prevRow?.name || id;
       await pool.query(
-        'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [uid(), 'area', id, areaName, who, start, cleaningEnd, start ? cleaningEnd - start : null]
+        'INSERT INTO cleaning_logs (id,item_type,item_id,item_name,cleaned_by,started_at,ended_at,duration_ms,notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [uid(), 'area', id, areaName, who, start, cleaningEnd, start ? cleaningEnd - start : null, prevRow?.notes || '']
       );
     }
     res.json({ ok: true });
@@ -680,6 +792,7 @@ app.get('/api/history', auth, async (req, res) => {
       startedAt:   l.started_at ? Number(l.started_at) : null,
       endedAt:     Number(l.ended_at),
       durationMs:  l.duration_ms ? Number(l.duration_ms) : null,
+      notes:       l.notes || '',
     }));
 
     const photos = photosRes.rows.map(p => ({
@@ -763,6 +876,251 @@ app.delete('/api/supplies/:id', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ── STOCK TAKES ──────────────────────────────────────────
+
+// All stock-take item definitions (used as template for new takes)
+const STOCKTAKE_TEMPLATE = [
+  {cat:'Guest Amenities',      name:'Shower Gel',                   unit:'pcs', fields:'amenity'},
+  {cat:'Guest Amenities',      name:'Conditioner / Shampoo',        unit:'pcs', fields:'amenity'},
+  {cat:'Guest Amenities',      name:'Handwash',                     unit:'pcs', fields:'amenity'},
+  {cat:'Guest Amenities',      name:'Lotion',                       unit:'pcs', fields:'amenity'},
+  {cat:'Linen – Towels',       name:'Bath Towel',                   unit:'pcs', fields:'linen'},
+  {cat:'Linen – Towels',       name:'Hand Towel',                   unit:'pcs', fields:'linen'},
+  {cat:'Linen – Towels',       name:'Bath Mat',                     unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Inners', name:'Super King Duvet Inner',       unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Inners', name:'King Duvet Inner',             unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Inners', name:'Queen Duvet Inner',            unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Inners', name:'Double Duvet Inner',           unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Inners', name:'Single Duvet Inner',           unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Covers', name:'Super King Duvet Cover',       unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Covers', name:'King Duvet Cover',             unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Covers', name:'Queen Duvet Cover',            unit:'pcs', fields:'linen'},
+  {cat:'Linen – Duvet Covers', name:'Single Duvet Cover',           unit:'pcs', fields:'linen'},
+  {cat:'Linen – Fitted Sheets',name:'Super King Fitted Sheet',      unit:'pcs', fields:'linen'},
+  {cat:'Linen – Fitted Sheets',name:'King Fitted Sheet',            unit:'pcs', fields:'linen'},
+  {cat:'Linen – Fitted Sheets',name:'Queen Fitted Sheet',           unit:'pcs', fields:'linen'},
+  {cat:'Linen – Fitted Sheets',name:'Double Fitted Sheet',          unit:'pcs', fields:'linen'},
+  {cat:'Linen – Fitted Sheets',name:'Single Fitted Sheet',          unit:'pcs', fields:'linen'},
+  {cat:'Linen – Mattress Protectors',name:'Super King Mattress Protector',unit:'pcs',fields:'linen'},
+  {cat:'Linen – Mattress Protectors',name:'Queen Mattress Protector',     unit:'pcs',fields:'linen'},
+  {cat:'Linen – Mattress Protectors',name:'Double Mattress Protector',    unit:'pcs',fields:'linen'},
+  {cat:'Linen – Pillows & Cases',name:'Continental Pillow Case',    unit:'pcs', fields:'linen'},
+  {cat:'Linen – Pillows & Cases',name:'Standard Pillow Case',       unit:'pcs', fields:'linen'},
+  {cat:'Linen – Pillows & Cases',name:'Continental Pillow Protector',unit:'pcs',fields:'linen'},
+  {cat:'Linen – Pillows & Cases',name:'Standard Pillow Protector',  unit:'pcs', fields:'linen'},
+  {cat:'Linen – Pillows & Cases',name:'Standard Pillow',            unit:'pcs', fields:'linen'},
+  {cat:'Linen – Pillows & Cases',name:'Continental Pillow',         unit:'pcs', fields:'linen'},
+  {cat:'Pool & Other Linen',   name:'Pool Towels',                  unit:'pcs', fields:'linen'},
+  {cat:'Pool & Other Linen',   name:'Maroon Fleece',                unit:'pcs', fields:'linen'},
+  {cat:'Pool & Other Linen',   name:'New Small Fleeces',            unit:'pcs', fields:'linen'},
+  {cat:'Pool & Other Linen',   name:'Laundry Bags',                 unit:'pcs', fields:'linen'},
+  {cat:'Stationery',           name:'White Bin Bags',               unit:'pcs', fields:'store'},
+  {cat:'Stationery',           name:'White Bin Liners',             unit:'pcs', fields:'store'},
+  {cat:'Stationery',           name:'White Note Books',             unit:'pcs', fields:'store'},
+  {cat:'Stationery',           name:'Pencils',                      unit:'pcs', fields:'store'},
+  {cat:'Stationery',           name:'Toilet Roll Stickers',         unit:'pcs', fields:'store'},
+  {cat:'Stationery',           name:'Welcome Cards',                unit:'pcs', fields:'store'},
+  {cat:'Other',                name:'Umbrellas',                    unit:'pcs', fields:'store'},
+  {cat:'Chemicals',            name:'Chop Chop',                    unit:'btl', fields:'store'},
+  {cat:'Chemicals',            name:'Steri',                        unit:'btl', fields:'store'},
+  {cat:'Chemicals',            name:'Window Clean',                 unit:'btl', fields:'store'},
+  {cat:'Chemicals',            name:'Ordorex',                      unit:'btl', fields:'store'},
+  {cat:'Equipment',            name:'Iron',                         unit:'pcs', fields:'store'},
+  {cat:'Equipment',            name:'Ironing Board',                unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Coffee Machines',              unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Cups',                         unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Lids',                         unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Stirrers',                     unit:'kg',  fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Sugar Sachets',                unit:'kg',  fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Sweetener Sachets',            unit:'kg',  fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Milk Pods',                    unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Coffee – Decaf',               unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Coffee – House Brand',         unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Cleaning Pods',                unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Display Boxes',                unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Earl Grey',                    unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'English Breakfast Tea',        unit:'pcs', fields:'store'},
+  {cat:'Coffee & Tea Station', name:'Chamomile',                    unit:'pcs', fields:'store'},
+];
+
+// List all stock-takes
+app.get('/api/stocktakes', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id,type,date,conducted_by,checked_by,created_at,completed FROM stocktakes ORDER BY date DESC, created_at DESC`
+    );
+    res.json(r.rows);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Get template (opening stocks pre-filled from last completed stocktake's closing)
+app.get('/api/stocktakes/template', auth, async (req, res) => {
+  try {
+    // Find the most recent completed stocktake
+    const lastR = await pool.query(
+      `SELECT id FROM stocktakes WHERE completed=1 ORDER BY date DESC, created_at DESC LIMIT 1`
+    );
+    let closingMap = {};
+    if (lastR.rows.length) {
+      const lastId = lastR.rows[0].id;
+      const itemsR = await pool.query(
+        `SELECT item_name, closing_stock FROM stocktake_items WHERE stocktake_id=$1`, [lastId]
+      );
+      for (const row of itemsR.rows) {
+        closingMap[row.item_name] = row.closing_stock || '';
+      }
+    }
+    const items = STOCKTAKE_TEMPLATE.map(t => ({
+      ...t,
+      opening_stock: closingMap[t.name] || '',
+      in_rooms: '', at_laundry: '', in_storeroom: '', damaged: '', closing_stock: '', notes: ''
+    }));
+    res.json(items);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Get one stock-take with all items
+app.get('/api/stocktakes/:id', auth, async (req, res) => {
+  try {
+    const st = await pool.query(`SELECT * FROM stocktakes WHERE id=$1`, [req.params.id]);
+    if (!st.rows.length) return res.status(404).json({ error: 'Not found' });
+    const items = await pool.query(
+      `SELECT * FROM stocktake_items WHERE stocktake_id=$1 ORDER BY id`, [req.params.id]
+    );
+    res.json({ ...st.rows[0], items: items.rows });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Create new stock-take with items
+app.post('/api/stocktakes', auth, async (req, res) => {
+  try {
+    const { type, date, conducted_by, checked_by, items } = req.body;
+    if (!type || !date) return res.status(400).json({ error: 'type and date required' });
+    const id = uid();
+    await pool.query(
+      `INSERT INTO stocktakes (id,type,date,conducted_by,checked_by,created_at,completed) VALUES ($1,$2,$3,$4,$5,$6,0)`,
+      [id, type, date, conducted_by||'', checked_by||'', Date.now()]
+    );
+    if (items && items.length) {
+      for (const it of items) {
+        await pool.query(
+          `INSERT INTO stocktake_items (id,stocktake_id,category,item_name,unit,fields,opening_stock,in_rooms,at_laundry,in_storeroom,damaged,closing_stock,notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [uid(), id, it.cat||it.category, it.name||it.item_name, it.unit||'pcs', it.fields||'linen',
+           it.opening_stock||'', it.in_rooms||'', it.at_laundry||'', it.in_storeroom||'',
+           it.damaged||'', it.closing_stock||'', it.notes||'']
+        );
+      }
+    }
+    res.json({ id });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Update stock-take header + items, optionally mark complete
+app.put('/api/stocktakes/:id', auth, async (req, res) => {
+  try {
+    const { type, date, conducted_by, checked_by, completed, items } = req.body;
+    await pool.query(
+      `UPDATE stocktakes SET type=COALESCE($1,type), date=COALESCE($2,date), conducted_by=COALESCE($3,conducted_by),
+       checked_by=COALESCE($4,checked_by), completed=COALESCE($5,completed) WHERE id=$6`,
+      [type, date, conducted_by, checked_by, completed, req.params.id]
+    );
+    if (items && items.length) {
+      await pool.query(`DELETE FROM stocktake_items WHERE stocktake_id=$1`, [req.params.id]);
+      for (const it of items) {
+        await pool.query(
+          `INSERT INTO stocktake_items (id,stocktake_id,category,item_name,unit,fields,opening_stock,in_rooms,at_laundry,in_storeroom,damaged,closing_stock,notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [uid(), req.params.id, it.cat||it.category, it.name||it.item_name, it.unit||'pcs', it.fields||'linen',
+           it.opening_stock||'', it.in_rooms||'', it.at_laundry||'', it.in_storeroom||'',
+           it.damaged||'', it.closing_stock||'', it.notes||'']
+        );
+      }
+    }
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Download stock-take as Excel
+app.get('/api/stocktakes/:id/excel', auth, async (req, res) => {
+  try {
+    const st = await pool.query(`SELECT * FROM stocktakes WHERE id=$1`, [req.params.id]);
+    if (!st.rows.length) return res.status(404).json({ error: 'Not found' });
+    const h = st.rows[0];
+    const items = await pool.query(`SELECT * FROM stocktake_items WHERE stocktake_id=$1 ORDER BY id`, [req.params.id]);
+
+    const wb = XLSX.utils.book_new();
+    const typeLabel = h.type === 'monthly' ? 'Monthly' : 'Weekly';
+
+    // ── Sheet 1: Stock Take ──
+    const rows = [
+      ['The Grey Hotel – Housekeeping Stock Take'],
+      [],
+      ['Type', typeLabel],
+      ['Date', h.date],
+      ['Conducted by', h.conducted_by || ''],
+      ['Checked by', h.checked_by || ''],
+      [],
+      ['Category', 'Item', 'Unit', 'Opening Stock', 'In Rooms', 'At Laundry', 'In Storeroom', 'Damaged', 'Closing Stock', 'Notes'],
+    ];
+
+    let lastCat = '';
+    for (const it of items.rows) {
+      if (it.category !== lastCat) {
+        rows.push([]); // blank row between categories
+        lastCat = it.category;
+      }
+      rows.push([
+        it.category, it.item_name, it.unit,
+        it.opening_stock || '', it.in_rooms || '', it.at_laundry || '',
+        it.in_storeroom || '', it.damaged || '', it.closing_stock || '',
+        it.notes || ''
+      ]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Column widths
+    ws['!cols'] = [
+      {wch:22},{wch:30},{wch:8},{wch:13},{wch:10},{wch:10},{wch:12},{wch:10},{wch:13},{wch:20}
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock Take');
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `StockTake_${typeLabel}_${h.date}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buf);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Delete stock-take (admin only)
+app.delete('/api/stocktakes/:id', auth, requireRole('admin'), async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM stocktake_items WHERE stocktake_id=$1`, [req.params.id]);
+    await pool.query(`DELETE FROM stocktakes WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Cleanup stock-takes older than 3 months (keep sept2026-seed forever)
+async function cleanupOldStocktakes() {
+  try {
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const cutoff = threeMonthsAgo.toISOString().slice(0,10);
+    const old = await pool.query(
+      `SELECT id FROM stocktakes WHERE date < $1 AND id != 'sept2026-seed'`, [cutoff]
+    );
+    for (const row of old.rows) {
+      await pool.query(`DELETE FROM stocktake_items WHERE stocktake_id=$1`, [row.id]);
+      await pool.query(`DELETE FROM stocktakes WHERE id=$1`, [row.id]);
+    }
+    if (old.rows.length) console.log(`🗑 Deleted ${old.rows.length} stock-take(s) older than 3 months`);
+  } catch (e) { console.error('Stock-take cleanup error:', e); }
+}
+
 // ── CATCH-ALL → serve frontend ──────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -781,6 +1139,7 @@ initDB()
       console.log(`🏨 Hotel Housekeeping running → http://localhost:${PORT}`);
     });
     scheduleDailyReset();
+    cleanupOldStocktakes();
   })
   .catch(err => {
     console.error('❌ Failed to start:', err.message);

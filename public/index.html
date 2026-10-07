@@ -283,6 +283,19 @@ tbody tr:hover td{background:#f8fafc;}
 .hist-log-name{font-weight:700;}
 .hist-log-meta{font-size:11px;color:var(--muted);margin-top:2px;}
 .hist-dur{font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap;}
+/* ── Stock Take ── */
+.st-row{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.st-row:hover{background:var(--hover)}
+.st-cat-hdr{background:var(--primary);color:#fff;font-size:12px;font-weight:700;padding:6px 14px;letter-spacing:.5px;text-transform:uppercase;margin-top:4px}
+.st-row-hdr{display:flex;gap:4px;padding:4px 8px;background:#f8f9fa;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.st-item-row{display:flex;gap:4px;padding:3px 8px;align-items:center;border-bottom:1px solid var(--border)}
+.st-item-row:last-child{border-bottom:none}
+.st-name-col{flex:0 0 190px;font-size:12px;font-weight:600;padding:2px 4px}
+.st-num-col{flex:1;text-align:center;font-size:11px;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.st-inp{flex:1;min-width:0;border:1px solid var(--border);border-radius:4px;padding:3px 5px;font-size:12px;text-align:center;background:#fff;color:#111}
+.st-inp:focus{outline:none;border-color:var(--primary);background:#f0f4ff}
+.st-inp[readonly]{background:#f0f4ff;color:var(--primary);font-weight:700;border-color:#c7d5ff}
+.st-closing{background:#f0f4ff!important;color:var(--primary)!important;font-weight:700!important}
 .hist-photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;padding:12px 16px;}
 .hist-photo-wrap{position:relative;}
 .hist-photo-wrap img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;}
@@ -650,11 +663,11 @@ function defaultView() {
 function buildNav() {
   let tabs = [];
   if (currentUser.role === 'housekeeper') {
-    tabs = [['my-rooms','🧹 My Work'],['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History']];
+    tabs = [['my-rooms','🧹 My Work'],['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
   } else if (currentUser.role === 'maintenance') {
     tabs = [['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History']];
   } else {
-    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance'],['history','📅 History']];
+    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
     if (isAdmin()) tabs.push(['admin','⚙️ Users']);
   }
   document.getElementById('app-nav').innerHTML = tabs.map(([id,lbl]) =>
@@ -674,6 +687,7 @@ function renderView() {
     case 'all-rooms':   main.innerHTML = renderAllSpaces();   break;
     case 'issues':      main.innerHTML = renderIssues();      break;
     case 'history':     main.innerHTML = renderHistoryShell(); loadHistory(); break;
+    case 'stocktake':   main.innerHTML = renderStocktakeShell(); loadStocktakeList(); break;
     case 'admin':       main.innerHTML = renderAdmin();       break;
   }
 }
@@ -1057,6 +1071,10 @@ function renderAdmin() {
 //  ITEM MODAL
 // ═══════════════════════════════════════════════════════
 function openItemModal(id) {
+  // Preserve any notes the user is currently typing — don't overwrite mid-edit
+  const existingNotes = document.getElementById('modal-notes');
+  const draftNotes = (existingNotes && currentItemId === id) ? existingNotes.value : null;
+
   currentItemId = id;
   const item = findItem(id);
   if (!item) return;
@@ -1126,6 +1144,11 @@ function openItemModal(id) {
         </div>
       </div>
     </div>`;
+  // Restore typed notes so a poll refresh doesn't erase what the user was writing
+  if (draftNotes !== null) {
+    const notesEl = document.getElementById('modal-notes');
+    if (notesEl) notesEl.value = draftNotes;
+  }
   startTimers();
   // Load photos on demand (not in state poll)
   loadPhotosFor(id).then(photos => {
@@ -1631,6 +1654,7 @@ async function loadHistory() {
             <div class="hist-log-body">
               <div class="hist-log-name">${l.itemName}</div>
               <div class="hist-log-meta">By ${l.cleanedBy||'—'} · Finished ${endTime}</div>
+              ${l.notes?`<div class="hist-log-meta" style="margin-top:3px;color:#555;font-style:italic">📝 ${l.notes}</div>`:''}
             </div>
             <div class="hist-dur">⏱ ${dur}</div>
           </div>`;
@@ -1737,6 +1761,328 @@ function toast(msg, type='info') {
   document.getElementById('toasts').appendChild(t);
   setTimeout(() => t.style.opacity='0', 3200);
   setTimeout(() => t.remove(), 3500);
+}
+
+// ═══════════════════════════════════════════════════════
+//  STOCK TAKE
+// ═══════════════════════════════════════════════════════
+
+function renderStocktakeShell() {
+  return `
+    <div class="pg-hdr">
+      <div><div class="pg-title">📦 Stock Take</div><div class="pg-sub">Weekly & Monthly Inventory</div></div>
+      <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>
+    </div>
+    <div id="st-list-wrap"></div>`;
+}
+
+async function loadStocktakeList() {
+  const wrap = document.getElementById('st-list-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">Loading…</div>';
+  try {
+    const list = await api('GET','/api/stocktakes');
+    if (!list.length) {
+      wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted)">No stock takes yet. Press <b>+ New Stock Take</b> to begin.</div>';
+      return;
+    }
+    wrap.innerHTML = list.map(st => {
+      const label = st.type === 'monthly' ? 'Monthly' : 'Weekly';
+      const badge = st.completed ? '<span style="background:#22c55e;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px">DONE</span>'
+                                 : '<span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;margin-left:6px">DRAFT</span>';
+      return `<div class="st-row" onclick="openStocktakeView('${st.id}')">
+        <div style="flex:1">
+          <div style="font-weight:700">${label} Stock Take${badge}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${st.date} · By ${st.conducted_by||'—'}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();downloadStocktake('${st.id}','${st.type}','${st.date}')">⬇ Excel</button>
+          ${isAdmin()||isSupervisor()?`<button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="event.stopPropagation();deleteStocktake('${st.id}')">✕</button>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="padding:24px;color:#ef4444">Failed to load stock takes.</div>';
+  }
+}
+
+async function openNewStocktake() {
+  let items;
+  try { items = await api('GET','/api/stocktakes/template'); }
+  catch(e) { toast('Could not load template','error'); return; }
+
+  const today = new Date().toISOString().slice(0,10);
+  const w = document.createElement('div');
+  w.id = 'st-modal-wrap';
+  w.innerHTML = `
+  <div class="overlay" onclick="if(event.target===this)closeExtra('st-modal-wrap')">
+    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+      <div class="modal-hdr">
+        <div class="modal-title">📦 New Stock Take</div>
+        <button class="modal-close" onclick="closeExtra('st-modal-wrap')">✕</button>
+      </div>
+      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label class="form-label">Type</label>
+          <select id="st-type" class="form-input">
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Date</label>
+          <input type="date" id="st-date" class="form-input" value="${today}">
+        </div>
+        <div>
+          <label class="form-label">Conducted by</label>
+          <input type="text" id="st-by" class="form-input" placeholder="Name" value="${currentUser.name||''}">
+        </div>
+        <div>
+          <label class="form-label">Checked by</label>
+          <input type="text" id="st-checked" class="form-input" placeholder="Name">
+        </div>
+      </div>
+      <div id="st-form-items" style="padding:0 16px 16px"></div>
+      <div style="padding:12px 16px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="closeExtra('st-modal-wrap')">Cancel</button>
+        <button class="btn btn-ghost" onclick="saveStocktake(false)">💾 Save Draft</button>
+        <button class="btn btn-primary" onclick="saveStocktake(true)">✓ Complete</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(w);
+  renderStocktakeForm(items, 'st-form-items');
+  window._stItems = items;
+}
+
+async function openStocktakeView(id) {
+  let st;
+  try { st = await api('GET',`/api/stocktakes/${id}`); }
+  catch(e) { toast('Could not load stock take','error'); return; }
+
+  const isEditable = !st.completed || isAdmin() || isSupervisor();
+  const label = st.type === 'monthly' ? 'Monthly' : 'Weekly';
+  const w = document.createElement('div');
+  w.id = 'st-modal-wrap';
+  w.innerHTML = `
+  <div class="overlay" onclick="if(event.target===this)closeExtra('st-modal-wrap')">
+    <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+      <div class="modal-hdr">
+        <div class="modal-title">📦 ${label} Stock Take – ${st.date}</div>
+        <button class="modal-close" onclick="closeExtra('st-modal-wrap')">✕</button>
+      </div>
+      <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label class="form-label">Type</label>
+          <select id="st-type" class="form-input" ${isEditable?'':'disabled'}>
+            <option value="weekly" ${st.type==='weekly'?'selected':''}>Weekly</option>
+            <option value="monthly" ${st.type==='monthly'?'selected':''}>Monthly</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Date</label>
+          <input type="date" id="st-date" class="form-input" value="${st.date}" ${isEditable?'':'disabled'}>
+        </div>
+        <div>
+          <label class="form-label">Conducted by</label>
+          <input type="text" id="st-by" class="form-input" value="${st.conducted_by||''}" ${isEditable?'':'disabled'}>
+        </div>
+        <div>
+          <label class="form-label">Checked by</label>
+          <input type="text" id="st-checked" class="form-input" value="${st.checked_by||''}" ${isEditable?'':'disabled'}>
+        </div>
+      </div>
+      <div id="st-form-items" style="padding:0 16px 16px"></div>
+      <div style="padding:12px 16px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="downloadStocktake('${st.id}','${st.type}','${st.date}')">⬇ Download Excel</button>
+        ${isEditable ? `<button class="btn btn-ghost" onclick="updateStocktake('${st.id}',false)">💾 Save</button>
+        ${!st.completed?`<button class="btn btn-primary" onclick="updateStocktake('${st.id}',true)">✓ Complete</button>`:''}` : ''}
+        <button class="btn btn-ghost" onclick="closeExtra('st-modal-wrap')">Close</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(w);
+  // Map items from DB format to template format
+  const items = st.items.map(it => ({
+    cat: it.category, name: it.item_name, unit: it.unit, fields: it.fields,
+    opening_stock: it.opening_stock, in_rooms: it.in_rooms, at_laundry: it.at_laundry,
+    in_storeroom: it.in_storeroom, damaged: it.damaged, closing_stock: it.closing_stock, notes: it.notes
+  }));
+  renderStocktakeForm(items, 'st-form-items', !isEditable);
+  window._stItems = items;
+  window._stId = id;
+}
+
+function renderStocktakeForm(items, containerId, readOnly) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  // Group by category
+  const cats = {};
+  items.forEach((it,i) => {
+    if (!cats[it.cat]) cats[it.cat] = [];
+    cats[it.cat].push({...it, _idx: i});
+  });
+
+  let html = '';
+  for (const [cat, citems] of Object.entries(cats)) {
+    html += `<div class="st-cat-hdr">${cat}</div>`;
+
+    // Header row for linen items
+    const hasLinen = citems.some(it => it.fields === 'linen');
+    if (hasLinen) {
+      html += `<div class="st-row-hdr">
+        <div class="st-name-col">Item</div>
+        <div class="st-num-col">Opening</div>
+        <div class="st-num-col">Rooms</div>
+        <div class="st-num-col">Laundry</div>
+        <div class="st-num-col">Storeroom</div>
+        <div class="st-num-col">Damaged</div>
+        <div class="st-num-col st-closing">Closing</div>
+      </div>`;
+    } else if (citems[0].fields === 'store') {
+      html += `<div class="st-row-hdr">
+        <div class="st-name-col">Item</div>
+        <div class="st-num-col">Unit</div>
+        <div class="st-num-col st-closing">Qty / Count</div>
+      </div>`;
+    } else {
+      // amenity
+      html += `<div class="st-row-hdr">
+        <div class="st-name-col">Item</div>
+        <div class="st-num-col st-closing">Count</div>
+      </div>`;
+    }
+
+    for (const it of citems) {
+      const i = it._idx;
+      const ro = readOnly ? 'readonly' : '';
+      if (it.fields === 'linen') {
+        html += `<div class="st-item-row" data-idx="${i}">
+          <div class="st-name-col">${it.name} <span style="font-size:10px;color:var(--muted)">${it.unit}</span></div>
+          <input class="st-inp" type="text" ${ro} value="${it.opening_stock||''}" placeholder="—" data-field="opening_stock" data-idx="${i}" oninput="stCalcClosing(${i})">
+          <input class="st-inp" type="text" ${ro} value="${it.in_rooms||''}" placeholder="—" data-field="in_rooms" data-idx="${i}" oninput="stCalcClosing(${i})">
+          <input class="st-inp" type="text" ${ro} value="${it.at_laundry||''}" placeholder="—" data-field="at_laundry" data-idx="${i}" oninput="stCalcClosing(${i})">
+          <input class="st-inp" type="text" ${ro} value="${it.in_storeroom||''}" placeholder="—" data-field="in_storeroom" data-idx="${i}" oninput="stCalcClosing(${i})">
+          <input class="st-inp" type="text" ${ro} value="${it.damaged||''}" placeholder="—" data-field="damaged" data-idx="${i}" oninput="stCalcClosing(${i})">
+          <input class="st-inp st-closing" type="text" readonly value="${it.closing_stock||''}" placeholder="auto" data-field="closing_stock" data-idx="${i}">
+        </div>`;
+      } else if (it.fields === 'store') {
+        html += `<div class="st-item-row" data-idx="${i}">
+          <div class="st-name-col">${it.name}</div>
+          <div class="st-num-col" style="font-size:11px;color:var(--muted);display:flex;align-items:center;justify-content:center">${it.unit}</div>
+          <input class="st-inp st-closing" type="text" ${ro} value="${it.in_storeroom||''}" placeholder="—" data-field="in_storeroom" data-idx="${i}">
+        </div>`;
+      } else {
+        // amenity
+        html += `<div class="st-item-row" data-idx="${i}">
+          <div class="st-name-col">${it.name}</div>
+          <input class="st-inp st-closing" type="text" ${ro} value="${it.closing_stock||''}" placeholder="—" data-field="closing_stock" data-idx="${i}">
+        </div>`;
+      }
+    }
+  }
+  container.innerHTML = html;
+}
+
+function stCalcClosing(idx) {
+  // Auto-calc closing = rooms + laundry + storeroom
+  const get = (field) => {
+    const el = document.querySelector(`[data-field="${field}"][data-idx="${idx}"]`);
+    return el ? parseFloat(el.value) || 0 : 0;
+  };
+  const rooms = get('in_rooms'), laundry = get('at_laundry'), store = get('in_storeroom');
+  const closingEl = document.querySelector(`[data-field="closing_stock"][data-idx="${idx}"]`);
+  if (closingEl) {
+    const total = rooms + laundry + store;
+    closingEl.value = (rooms || laundry || store) ? String(total) : '';
+  }
+  // Update _stItems
+  if (window._stItems && window._stItems[idx]) {
+    ['opening_stock','in_rooms','at_laundry','in_storeroom','damaged'].forEach(f => {
+      const el = document.querySelector(`[data-field="${f}"][data-idx="${idx}"]`);
+      if (el) window._stItems[idx][f] = el.value;
+    });
+    if (closingEl) window._stItems[idx].closing_stock = closingEl.value;
+  }
+}
+
+function collectStItems() {
+  // Read all inputs back into _stItems
+  const inputs = document.querySelectorAll('[data-field][data-idx]');
+  inputs.forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    const field = el.dataset.field;
+    if (window._stItems && window._stItems[idx]) {
+      window._stItems[idx][field] = el.value;
+    }
+  });
+  return window._stItems;
+}
+
+async function saveStocktake(complete) {
+  const type = document.getElementById('st-type')?.value;
+  const date = document.getElementById('st-date')?.value;
+  const by = document.getElementById('st-by')?.value || '';
+  const checked = document.getElementById('st-checked')?.value || '';
+  if (!date) { toast('Please enter a date','error'); return; }
+  const items = collectStItems();
+  try {
+    const r = await api('POST','/api/stocktakes',{
+      type, date, conducted_by: by, checked_by: checked, items
+    });
+    if (complete) {
+      await api('PUT',`/api/stocktakes/${r.id}`,{ completed: 1 });
+    }
+    closeExtra('st-modal-wrap');
+    toast(complete ? 'Stock take completed ✓' : 'Draft saved','info');
+    loadStocktakeList();
+  } catch(e) { toast('Error saving stock take','error'); }
+}
+
+async function updateStocktake(id, complete) {
+  const type = document.getElementById('st-type')?.value;
+  const date = document.getElementById('st-date')?.value;
+  const by = document.getElementById('st-by')?.value || '';
+  const checked = document.getElementById('st-checked')?.value || '';
+  const items = collectStItems();
+  try {
+    await api('PUT',`/api/stocktakes/${id}`,{
+      type, date, conducted_by: by, checked_by: checked,
+      completed: complete ? 1 : undefined, items
+    });
+    closeExtra('st-modal-wrap');
+    toast(complete ? 'Stock take completed ✓' : 'Saved','info');
+    loadStocktakeList();
+  } catch(e) { toast('Error saving','error'); }
+}
+
+async function downloadStocktake(id, type, date) {
+  try {
+    const token = localStorage.getItem('hk_token');
+    const resp = await fetch(`/api/stocktakes/${id}/excel`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!resp.ok) { toast('Download failed','error'); return; }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const typeLabel = type === 'monthly' ? 'Monthly' : 'Weekly';
+    a.download = `StockTake_${typeLabel}_${date}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { toast('Download failed','error'); }
+}
+
+async function deleteStocktake(id) {
+  if (!confirm('Delete this stock take permanently?')) return;
+  try {
+    await api('DELETE',`/api/stocktakes/${id}`);
+    toast('Deleted','info');
+    loadStocktakeList();
+  } catch(e) { toast('Error deleting','error'); }
 }
 
 // Sign the user straight back in if they still have a valid session.
