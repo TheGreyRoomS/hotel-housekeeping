@@ -419,6 +419,26 @@ async function getFullState() {
   return { rooms, areas };
 }
 
+// Today's photo counts per room/area (since last 2am UTC)
+app.get('/api/photos/today-counts', auth, async (req, res) => {
+  try {
+    const now = new Date();
+    const last2am = new Date(now);
+    last2am.setUTCHours(2, 0, 0, 0);
+    if (last2am > now) last2am.setUTCDate(last2am.getUTCDate() - 1);
+    const since2am = last2am.getTime();
+    const result = await pool.query(
+      `SELECT item_type, item_id, COUNT(*) AS cnt FROM photos
+       WHERE item_type IN ('room','area') AND uploaded_at >= $1
+       GROUP BY item_type, item_id`,
+      [since2am]
+    );
+    const counts = {};
+    result.rows.forEach(r => { counts[`${r.item_type}:${r.item_id}`] = parseInt(r.cnt); });
+    res.json(counts);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
 // Photos on demand — room/area photos reset at 2am daily (same as status/assignments)
 app.get('/api/photos/:itemType/:itemId', auth, async (req, res) => {
   try {

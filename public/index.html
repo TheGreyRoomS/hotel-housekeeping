@@ -211,6 +211,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .hk-card.s-inspection{border-left-color:var(--inspection);}
 .hk-card.s-clean{border-left-color:var(--clean);}
 .hk-card.area-hk{background:#fafbff;}
+/* ── Housekeeping daily view ── */
+.hkd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px;}
+.hkd-card{background:var(--card);border-radius:12px;box-shadow:var(--sh);border-left:4px solid #ddd;padding:14px 16px;}
+.hkd-card.s-dirty{border-left-color:var(--dirty);}
+.hkd-card.s-cleaning{border-left-color:var(--cleaning);}
+.hkd-card.s-inspection{border-left-color:var(--inspection);}
+.hkd-card.s-clean{border-left-color:var(--clean);}
+.hkd-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.hkd-name{font-weight:700;font-size:15px;}
+.hkd-meta{font-size:11px;color:var(--muted);margin-bottom:8px;}
+.hkd-photos{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:var(--muted);cursor:pointer;}
+.hkd-photo-badge{background:var(--primary);color:#fff;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700;}
+.hkd-notes{width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;resize:vertical;min-height:48px;box-sizing:border-box;font-family:inherit;}
+.hkd-notes:focus{outline:none;border-color:var(--primary);}
+.hkd-btns{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
 .hk-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
 .hk-title{font-size:18px;font-weight:800;}
 .hk-acts{display:flex;gap:8px;flex-wrap:wrap;}
@@ -665,11 +680,11 @@ function defaultView() {
 function buildNav() {
   let tabs = [];
   if (currentUser.role === 'housekeeper') {
-    tabs = [['my-rooms','🧹 My Work'],['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
+    tabs = [['my-rooms','🧹 My Work'],['housekeeping','🏠 Housekeeping'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
   } else if (currentUser.role === 'maintenance') {
     tabs = [['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History']];
   } else {
-    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
+    tabs = [['overview','🏨 Overview'],['assignments','📋 Assign'],['housekeeping','🏠 Housekeeping'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
     if (isAdmin()) tabs.push(['admin','⚙️ Users']);
   }
   document.getElementById('app-nav').innerHTML = tabs.map(([id,lbl]) =>
@@ -686,7 +701,8 @@ function renderView() {
     case 'overview':    main.innerHTML = renderOverview();    startTimers(); break;
     case 'assignments': main.innerHTML = renderAssignments(); break;
     case 'my-rooms':    main.innerHTML = renderHKView();      startTimers(); break;
-    case 'all-rooms':   main.innerHTML = renderAllSpaces();   break;
+    case 'all-rooms':      main.innerHTML = renderAllSpaces();      break;
+    case 'housekeeping':   main.innerHTML = renderHKDailyShell(); loadHKDailyView(); break;
     case 'issues':      main.innerHTML = renderIssues();      break;
     case 'history':     main.innerHTML = renderHistoryShell(); loadHistory(); break;
     case 'stocktake':   main.innerHTML = renderStocktakeShell(); loadStocktakeList(); break;
@@ -847,6 +863,94 @@ function hkCard(item) {
         </div>
       </div>
     </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  HOUSEKEEPING DAILY VIEW
+//  Shows all rooms + areas with today's notes & photos.
+//  Notes and photos reset at 2am daily (server filters by
+//  last-2am UTC). History retains everything for 14 days.
+// ══════════════════════════════════════════════════════════
+function renderHKDailyShell() {
+  const now = new Date();
+  const resetAt = new Date(now);
+  resetAt.setUTCHours(2,0,0,0);
+  if (resetAt > now) resetAt.setUTCDate(resetAt.getUTCDate()-1);
+  const nextReset = new Date(resetAt); nextReset.setUTCDate(nextReset.getUTCDate()+1);
+  const hrsLeft = Math.floor((nextReset-now)/3600000);
+  const minsLeft = Math.floor(((nextReset-now)%3600000)/60000);
+
+  let roomCards = state.rooms.map(r => hkdCard(r, false)).join('');
+  let areaCards = state.areas.map(a => hkdCard(a, true)).join('');
+
+  return `
+    <div class="pg-hdr">
+      <div>
+        <div class="pg-title">🏠 Housekeeping</div>
+        <div class="pg-sub">Notes & photos reset in ${hrsLeft}h ${minsLeft}m · History kept 14 days</div>
+      </div>
+    </div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🛏 Rooms</div><div class="sec-div-line"></div></div>
+    <div class="hkd-grid" id="hkd-rooms">${roomCards}</div>
+    <div class="sec-div"><div class="sec-div-line"></div><div class="sec-div-label">🏞 Areas</div><div class="sec-div-line"></div></div>
+    <div class="hkd-grid" id="hkd-areas">${areaCards}</div>`;
+}
+
+function hkdCard(item, isArea) {
+  const did  = isArea ? `'${item.id}'` : item.id;
+  const sid  = String(item.id).replace(/\W/g,'_');
+  const name = isArea ? `${item.icon} ${item.name}` : `Room ${item.id}`;
+  const asgn = getAssignedNames(item) || 'Unassigned';
+  return `
+    <div class="hkd-card s-${item.status}" id="hkdc-${sid}">
+      <div class="hkd-top">
+        <div class="hkd-name">${name}</div>
+        <span class="sbadge sb-${item.status}">${STATUS_FULL[item.status]}</span>
+      </div>
+      <div class="hkd-meta">🧹 ${asgn}</div>
+      <div class="hkd-photos" id="hkd-ph-${sid}" onclick="openItemModal(${did})">
+        <span>📷</span><span id="hkd-ph-cnt-${sid}" style="color:var(--muted)">…</span>
+      </div>
+      <textarea class="hkd-notes" id="hkd-note-${sid}" placeholder="Today's notes…">${item.notes||''}</textarea>
+      <div class="hkd-btns">
+        <button class="btn btn-ghost btn-sm" onclick="saveHKDNote(${did},'${sid}')">💾 Save Note</button>
+        <button class="btn btn-ghost btn-sm" onclick="openItemModal(${did})">📷 Photos</button>
+      </div>
+    </div>`;
+}
+
+async function loadHKDailyView() {
+  try {
+    const counts = await api('/api/photos/today-counts');
+    // Update photo counts on each card
+    [...state.rooms, ...state.areas].forEach(item => {
+      const isArea = isAreaId(item.id);
+      const sid = String(item.id).replace(/\W/g,'_');
+      const key = `${isArea?'area':'room'}:${item.id}`;
+      const cnt = counts[key] || 0;
+      const el = document.getElementById(`hkd-ph-cnt-${sid}`);
+      if (el) {
+        if (cnt > 0) {
+          el.innerHTML = `<span class="hkd-photo-badge">${cnt}</span> photo${cnt!==1?'s':''} today`;
+          el.parentElement.title = 'Click to view photos';
+        } else {
+          el.textContent = 'No photos yet today';
+        }
+      }
+    });
+  } catch(e) { /* non-fatal */ }
+}
+
+async function saveHKDNote(id, sid) {
+  const el = document.getElementById(`hkd-note-${sid}`);
+  if (!el) return;
+  const notes = el.value;
+  const type = isAreaId(id) ? 'areas' : 'rooms';
+  try {
+    await api(`/api/${type}/${id}`, { method:'PATCH', body:{ notes } });
+    const item = findItem(id); if (item) item.notes = notes;
+    toast('Note saved ✓','success');
+  } catch(e) { toast('Error saving note','error'); }
 }
 
 function renderAllSpaces() {
