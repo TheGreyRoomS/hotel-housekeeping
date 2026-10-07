@@ -1862,7 +1862,7 @@ async function openStocktakeView(id) {
   try { st = await api(`/api/stocktakes/${id}`); }
   catch(e) { toast('Could not load stock take','error'); return; }
 
-  const isAlvina = currentUser && currentUser.username === 'alvina';
+  const isAlvina = currentUser && currentUser.username && currentUser.username.toLowerCase() === 'alvina';
   const isEditable = !st.completed || isAdmin() || isAlvina;
   const label = st.type === 'monthly' ? 'Monthly' : 'Weekly';
   const w = document.createElement('div');
