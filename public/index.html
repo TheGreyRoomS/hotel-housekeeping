@@ -1799,7 +1799,7 @@ async function loadStocktakeList() {
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();downloadStocktake('${st.id}','${st.type}','${st.date}')">⬇ Excel</button>
-          ${isAdmin()||isSupervisor()?`<button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="event.stopPropagation();deleteStocktake('${st.id}')">✕</button>`:''}
+          ${isAdmin()?`<button class="btn btn-ghost btn-sm" style="color:#ef4444" onclick="event.stopPropagation();deleteStocktake('${st.id}')">✕</button>`:''}
         </div>
       </div>`;
     }).join('');
@@ -1862,7 +1862,8 @@ async function openStocktakeView(id) {
   try { st = await api(`/api/stocktakes/${id}`); }
   catch(e) { toast('Could not load stock take','error'); return; }
 
-  const isEditable = !st.completed || isAdmin() || isSupervisor();
+  const isAlvina = currentUser && currentUser.username === 'alvina';
+  const isEditable = !st.completed || isAdmin() || isAlvina;
   const label = st.type === 'monthly' ? 'Monthly' : 'Weekly';
   const w = document.createElement('div');
   w.id = 'st-modal-wrap';
