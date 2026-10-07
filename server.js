@@ -1061,7 +1061,7 @@ app.get('/api/stocktakes/:id/excel', auth, async (req, res) => {
       ['Conducted by', h.conducted_by || ''],
       ['Checked by', h.checked_by || ''],
       [],
-      ['Category', 'Item', 'Unit', 'Opening Stock', 'In Rooms', 'At Laundry', 'In Storeroom', 'Damaged', 'Closing Stock', 'Notes'],
+      ['Category', 'Item', 'Unit', 'Opening Stock', 'In Rooms', 'At Laundry', 'In Storeroom', 'Damaged', 'Closing Stock', 'Variance', 'Notes'],
     ];
 
     let lastCat = '';
@@ -1070,11 +1070,14 @@ app.get('/api/stocktakes/:id/excel', auth, async (req, res) => {
         rows.push([]); // blank row between categories
         lastCat = it.category;
       }
+      const opening = parseFloat(it.opening_stock) || 0;
+      const closing = parseFloat(it.closing_stock) || 0;
+      const variance = (it.closing_stock !== '' && it.closing_stock !== null) ? closing - opening : '';
       rows.push([
         it.category, it.item_name, it.unit,
         it.opening_stock || '', it.in_rooms || '', it.at_laundry || '',
         it.in_storeroom || '', it.damaged || '', it.closing_stock || '',
-        it.notes || ''
+        variance, it.notes || ''
       ]);
     }
 
@@ -1082,7 +1085,7 @@ app.get('/api/stocktakes/:id/excel', auth, async (req, res) => {
 
     // Column widths
     ws['!cols'] = [
-      {wch:22},{wch:30},{wch:8},{wch:13},{wch:10},{wch:10},{wch:12},{wch:10},{wch:13},{wch:20}
+      {wch:22},{wch:30},{wch:8},{wch:13},{wch:10},{wch:10},{wch:12},{wch:10},{wch:13},{wch:10},{wch:20}
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Stock Take');

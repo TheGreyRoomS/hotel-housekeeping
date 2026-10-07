@@ -296,6 +296,8 @@ tbody tr:hover td{background:#f8fafc;}
 .st-inp:focus{outline:none;border-color:var(--primary);background:#f0f4ff}
 .st-inp[readonly]{background:#f0f4ff;color:var(--primary);font-weight:700;border-color:#c7d5ff}
 .st-closing{background:#f0f4ff!important;color:var(--primary)!important;font-weight:700!important}
+.st-variance{flex:0 0 60px;text-align:center;font-size:11px;color:var(--muted)}
+.st-variance-cell{flex:0 0 60px;text-align:center;font-size:12px;font-weight:700;padding:2px 4px}
 .hist-photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;padding:12px 16px;}
 .hist-photo-wrap{position:relative;}
 .hist-photo-wrap img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;}
@@ -1938,6 +1940,7 @@ function renderStocktakeForm(items, containerId, readOnly) {
         <div class="st-num-col">Storeroom</div>
         <div class="st-num-col">Damaged</div>
         <div class="st-num-col st-closing">Closing</div>
+        <div class="st-num-col st-variance">Variance</div>
       </div>`;
     } else if (citems[0].fields === 'store') {
       html += `<div class="st-row-hdr">
@@ -1965,6 +1968,7 @@ function renderStocktakeForm(items, containerId, readOnly) {
           <input class="st-inp" type="text" ${ro} value="${it.in_storeroom||''}" placeholder="—" data-field="in_storeroom" data-idx="${i}" oninput="stCalcClosing(${i})">
           <input class="st-inp" type="text" ${ro} value="${it.damaged||''}" placeholder="—" data-field="damaged" data-idx="${i}" oninput="stCalcClosing(${i})">
           <input class="st-inp st-closing" type="text" readonly value="${it.closing_stock||''}" placeholder="auto" data-field="closing_stock" data-idx="${i}">
+          <div class="st-variance-cell" data-variance="${i}"></div>
         </div>`;
       } else if (it.fields === 'store') {
         html += `<div class="st-item-row" data-idx="${i}">
@@ -1985,17 +1989,32 @@ function renderStocktakeForm(items, containerId, readOnly) {
 }
 
 function stCalcClosing(idx) {
-  // Auto-calc closing = rooms + laundry + storeroom
   const get = (field) => {
     const el = document.querySelector(`[data-field="${field}"][data-idx="${idx}"]`);
     return el ? parseFloat(el.value) || 0 : 0;
   };
-  const rooms = get('in_rooms'), laundry = get('at_laundry'), store = get('in_storeroom');
+  const getVal = (field) => {
+    const el = document.querySelector(`[data-field="${field}"][data-idx="${idx}"]`);
+    return el ? el.value : '';
+  };
+  const rooms = get('in_rooms'), laundry = get('at_laundry'), store = get('in_storeroom'), damaged = get('damaged');
+  const hasAny = rooms || laundry || store || damaged;
+  const total = rooms + laundry + store + damaged;
   const closingEl = document.querySelector(`[data-field="closing_stock"][data-idx="${idx}"]`);
-  if (closingEl) {
-    const total = rooms + laundry + store;
-    closingEl.value = (rooms || laundry || store) ? String(total) : '';
+  if (closingEl) closingEl.value = hasAny ? String(total) : '';
+
+  // Variance = closing - opening
+  const opening = parseFloat(getVal('opening_stock')) || 0;
+  const variance = hasAny ? total - opening : (parseFloat(getVal('closing_stock')) || 0) - opening;
+  const varEl = document.querySelector(`[data-variance="${idx}"]`);
+  if (varEl) {
+    const v = hasAny ? total - opening : null;
+    if (v === null || isNaN(v)) { varEl.textContent = '—'; varEl.style.color = 'var(--muted)'; }
+    else if (v > 0) { varEl.textContent = '+' + v; varEl.style.color = '#22c55e'; }
+    else if (v < 0) { varEl.textContent = String(v); varEl.style.color = '#ef4444'; }
+    else { varEl.textContent = '0'; varEl.style.color = 'var(--muted)'; }
   }
+
   // Update _stItems
   if (window._stItems && window._stItems[idx]) {
     ['opening_stock','in_rooms','at_laundry','in_storeroom','damaged'].forEach(f => {
