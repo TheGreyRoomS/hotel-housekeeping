@@ -2052,10 +2052,10 @@ async function saveStocktake(complete) {
     }});
     if (complete) {
       await api(`/api/stocktakes/${r.id}`,{ method:'PUT', body:{ completed: 1 }});
+      closeExtra('st-modal-wrap');
+      loadStocktakeList();
     }
-    closeExtra('st-modal-wrap');
     toast(complete ? 'Stock take completed ✓' : 'Draft saved','info');
-    loadStocktakeList();
   } catch(e) { toast('Error saving stock take','error'); }
 }
 
@@ -2070,9 +2070,11 @@ async function updateStocktake(id, complete) {
       type, date, conducted_by: by, checked_by: checked,
       completed: complete ? 1 : undefined, items
     }});
-    closeExtra('st-modal-wrap');
+    if (complete) {
+      closeExtra('st-modal-wrap');
+      loadStocktakeList();
+    }
     toast(complete ? 'Stock take completed ✓' : 'Saved','info');
-    loadStocktakeList();
   } catch(e) { toast('Error saving','error'); }
 }
 
