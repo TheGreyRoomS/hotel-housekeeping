@@ -1773,7 +1773,7 @@ function renderStocktakeShell() {
   return `
     <div class="pg-hdr">
       <div><div class="pg-title">📦 Stock Take</div><div class="pg-sub">Weekly & Monthly Inventory</div></div>
-      <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>
+      ${isAdmin() ? `<button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>` : ''}
     </div>
     <div id="st-list-wrap"></div>`;
 }
