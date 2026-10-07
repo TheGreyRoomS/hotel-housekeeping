@@ -1773,9 +1773,85 @@ function renderStocktakeShell() {
   return `
     <div class="pg-hdr">
       <div><div class="pg-title">📦 Stock Take</div><div class="pg-sub">Weekly & Monthly Inventory</div></div>
-      ${isAdmin() ? `<button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>` : ''}
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="printStocktakeSheet()">🖨️ Print Sheet</button>
+        ${isAdmin() ? `<button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>` : ''}
+      </div>
     </div>
     <div id="st-list-wrap"></div>`;
+}
+
+async function printStocktakeSheet() {
+  let items;
+  try { items = await api('/api/stocktakes/template'); }
+  catch(e) { toast('Could not load template','error'); return; }
+
+  // Group by category
+  const cats = {};
+  items.forEach(it => { if (!cats[it.cat]) cats[it.cat] = []; cats[it.cat].push(it); });
+
+  const today = new Date().toLocaleDateString('en-ZA');
+
+  let tables = '';
+  for (const [cat, citems] of Object.entries(cats)) {
+    const type = citems[0].fields;
+    let header, rows = '';
+    if (type === 'linen') {
+      header = `<tr><th class="left">Item</th><th>Unit</th><th>Rooms</th><th>Laundry</th><th>Storeroom</th><th>Damaged</th><th>Closing</th></tr>`;
+      citems.forEach(it => { rows += `<tr><td class="item">${it.name}</td><td class="c">${it.unit}</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>`; });
+    } else if (type === 'store') {
+      header = `<tr><th class="left">Item</th><th>Unit</th><th>Storeroom Qty</th><th>Notes</th></tr>`;
+      citems.forEach(it => { rows += `<tr><td class="item">${it.name}</td><td class="c">${it.unit}</td><td class="n"></td><td></td></tr>`; });
+    } else {
+      header = `<tr><th class="left">Item</th><th>Unit</th><th>Closing / Count</th><th>Notes</th></tr>`;
+      citems.forEach(it => { rows += `<tr><td class="item">${it.name}</td><td class="c">${it.unit}</td><td class="n"></td><td></td></tr>`; });
+    }
+    tables += `<div class="cat-hdr">${cat.toUpperCase()}</div><table><thead>${header}</thead><tbody>${rows}</tbody></table>`;
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Stock Take Sheet</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:9.5px;color:#111;background:#fff;padding:8mm}
+h1{font-size:15px;text-align:center;text-transform:uppercase;letter-spacing:1px}
+h2{font-size:11px;text-align:center;font-weight:normal;margin-bottom:8px}
+.meta{display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;border-top:2px solid #111;border-bottom:1px solid #ccc;margin-bottom:8px}
+.mf{display:flex;align-items:center;gap:6px}.mf b{white-space:nowrap;font-size:9.5px}
+.ml{border-bottom:1px solid #555;min-width:100px;height:13px}
+.cat-hdr{background:#333;color:#fff;font-weight:700;font-size:9.5px;padding:3px 6px;margin-top:8px;letter-spacing:.5px}
+table{width:100%;border-collapse:collapse;margin-bottom:2px}
+th{background:#1a4971;color:#fff;padding:3px 5px;font-size:8.5px;border:1px solid #666;text-align:center}
+th.left{text-align:left}
+td{border:1px solid #bbb;padding:2px 5px;vertical-align:middle}
+td.item{font-size:9.5px;width:32%}td.c{text-align:center;color:#555;width:26px}td.n{width:52px}
+tr:nth-child(even) td{background:#f7f7f7}
+.footer{display:flex;gap:24px;margin-top:12px;padding-top:8px;border-top:1px solid #ccc;flex-wrap:wrap}
+.sig{flex:1;min-width:140px}.sig label{font-weight:700;font-size:9px;display:block;margin-bottom:12px}
+.sig-line{border-bottom:1px solid #555;height:16px;margin-bottom:3px}.sig-name{font-size:8px;color:#666}
+.notes{border:1px solid #ccc;padding:5px;min-height:36px;margin-top:8px}
+.notes label{font-weight:700;font-size:9px;display:block;margin-bottom:3px}
+@media print{@page{margin:8mm;size:A4 portrait}button{display:none}}
+</style></head><body>
+<h1>The Grey Room Hotel</h1><h2>Stock Take Sheet</h2>
+<div class="meta">
+  <div class="mf"><b>Date:</b><div class="ml"></div></div>
+  <div class="mf"><b>Type:</b><div class="ml" style="min-width:60px"></div>&nbsp;(Weekly / Monthly)</div>
+  <div class="mf"><b>Conducted by:</b><div class="ml"></div></div>
+  <div class="mf"><b>Checked by:</b><div class="ml"></div></div>
+</div>
+${tables}
+<div class="notes"><label>Notes / Comments:</label></div>
+<div class="footer">
+  <div class="sig"><label>Conducted by:</label><div class="sig-line"></div><div class="sig-name">Name &amp; Signature</div></div>
+  <div class="sig"><label>Checked / Verified by:</label><div class="sig-line"></div><div class="sig-name">Name &amp; Signature</div></div>
+  <div class="sig"><label>Date completed:</label><div class="sig-line"></div></div>
+</div>
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else toast('Allow pop-ups to print','error');
 }
 
 async function loadStocktakeList() {
