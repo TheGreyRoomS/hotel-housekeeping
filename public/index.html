@@ -838,10 +838,13 @@ function hkCard(item) {
           <div style="font-size:12px;color:var(--muted);padding:6px">Loading…</div>
           <div class="ph-upload" onclick="triggerUpload(${did},'hk')"><div style="font-size:22px">📷</div><div>Add</div></div>
         </div>
-        <div class="sec-lbl" style="margin-top:14px">📝 Notes</div>
-        <textarea id="hk-notes-${sid}" placeholder="Add notes…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px;box-sizing:border-box">${item.notes||''}</textarea>
-        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doHKNotes(${did},'${sid}')">Save Notes</button>
-        <button class="btn btn-warn btn-sm" onclick="openAddIssue(${did})">+ Report Issue</button>
+        <div class="sec-lbl" style="margin-top:14px">📝 Housekeeping Notes</div>
+        <textarea id="hk-notes-${sid}" placeholder="Add notes about this room/area…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px;box-sizing:border-box">${item.notes||''}</textarea>
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doHKNotes(${did},'${sid}')">💾 Save Notes</button>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <div class="sec-lbl" style="margin-bottom:8px">🔧 Maintenance</div>
+          <button class="btn btn-warn btn-sm" onclick="openAddIssue(${did})">+ Report Issue</button>
+        </div>
       </div>
     </div>`;
 }
@@ -1129,9 +1132,9 @@ function openItemModal(id) {
           </div>` : ''}
           ${isReception() || isHK() ? `
           <div class="msec">
-            <div class="sec-lbl">Notes</div>
-            <textarea id="modal-notes" placeholder="Add notes…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px">${item.notes||''}</textarea>
-            <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doNotes(${did})">Save Notes</button>
+            <div class="sec-lbl">📝 Housekeeping Notes</div>
+            <textarea id="modal-notes" placeholder="Add notes about this room/area…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r);font-size:13px;resize:vertical;min-height:56px">${item.notes||''}</textarea>
+            <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="doNotes(${did})">💾 Save Notes</button>
           </div>` : ''}
           <div class="msec">
             <div class="sec-lbl" id="modal-ph-lbl">📷 ${ia?'Photos':'Minibar Photos'}</div>
@@ -1140,7 +1143,8 @@ function openItemModal(id) {
               <div class="ph-upload" onclick="triggerUpload(${did},'modal')"><div style="font-size:22px">📷</div><div>Add Photo</div></div>
             </div>
           </div>
-          <div class="msec">
+          <div class="msec" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+            <div class="sec-lbl" style="margin-bottom:8px">🔧 Maintenance</div>
             <button class="btn btn-warn btn-sm" onclick="openAddIssue(${did})">+ Report Issue</button>
           </div>
         </div>
