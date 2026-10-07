@@ -1969,7 +1969,7 @@ async function loadStocktakeList() {
   try {
     const list = await api('/api/stocktakes');
     if (!list.length) {
-      wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted)">No stock takes yet. Press <b>+ New Stock Take</b> to begin.</div>';
+      wrap.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted)">No stock takes yet.${isAdmin() ? ' Press <b>+ New Stock Take</b> to begin.' : ''}</div>`;
       return;
     }
     wrap.innerHTML = list.map(st => {
@@ -1993,6 +1993,7 @@ async function loadStocktakeList() {
 }
 
 async function openNewStocktake() {
+  window._stNewId = null; // reset so Save Draft creates fresh record
   let items;
   try { items = await api('/api/stocktakes/template'); }
   catch(e) { toast('Could not load template','error'); return; }
@@ -2291,9 +2292,15 @@ async function saveStocktake(complete) {
   if (!date) { toast('Please enter a date','error'); return; }
   const items = collectStItems();
   try {
+    // If already saved as draft, update instead of creating duplicate
+    if (window._stNewId) {
+      await updateStocktake(window._stNewId, complete);
+      return;
+    }
     const r = await api('/api/stocktakes',{ method:'POST', body:{
       type, date, conducted_by: by, checked_by: checked, items
     }});
+    window._stNewId = r.id; // track so subsequent saves update this record
     if (complete) {
       await api(`/api/stocktakes/${r.id}`,{ method:'PUT', body:{ completed: 1 }});
       closeExtra('st-modal-wrap');
