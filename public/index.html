@@ -1986,7 +1986,67 @@ function renderStocktakeForm(items, containerId, readOnly) {
       }
     }
   }
+  if (!readOnly) {
+    html += `<div style="padding:12px 0 4px">
+      <button class="btn btn-ghost btn-sm" onclick="stAddItem('${containerId}')">+ Add Item</button>
+    </div>`;
+  }
   container.innerHTML = html;
+}
+
+function stAddItem(containerId) {
+  collectStItems();
+  const cats = [...new Set((window._stItems||[]).map(it => it.cat))];
+  const catOpts = cats.map(c => `<option value="${c}">`).join('');
+  const old = document.getElementById('st-add-item-modal');
+  if (old) old.remove();
+  const d = document.createElement('div');
+  d.id = 'st-add-item-modal';
+  d.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;z-index:9999;min-width:300px;box-shadow:0 8px 32px rgba(0,0,0,.4)';
+  d.innerHTML = `
+    <h3 style="margin-bottom:14px;font-size:15px">Add Item</h3>
+    <datalist id="st-cats-list">${catOpts}</datalist>
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Category</label>
+      <input id="st-new-cat" class="form-input" list="st-cats-list" placeholder="e.g. Guest Amenities">
+    </div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Item Name</label>
+      <input id="st-new-name" class="form-input" placeholder="e.g. Soap Bar">
+    </div>
+    <div style="margin-bottom:10px;display:flex;gap:10px">
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Unit</label>
+        <input id="st-new-unit" class="form-input" value="pcs" placeholder="pcs">
+      </div>
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Type</label>
+        <select id="st-new-fields" class="form-input">
+          <option value="linen">Linen (full tracking)</option>
+          <option value="store">Store (qty only)</option>
+          <option value="amenity">Amenity (closing only)</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-primary btn-sm" onclick="stConfirmAddItem('${containerId}')">Add</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('st-add-item-modal').remove()">Cancel</button>
+    </div>`;
+  document.body.appendChild(d);
+  setTimeout(() => document.getElementById('st-new-cat').focus(), 50);
+}
+
+function stConfirmAddItem(containerId) {
+  const cat   = document.getElementById('st-new-cat').value.trim();
+  const name  = document.getElementById('st-new-name').value.trim();
+  const unit  = document.getElementById('st-new-unit').value.trim() || 'pcs';
+  const fields= document.getElementById('st-new-fields').value;
+  if (!cat || !name) { toast('Please enter category and item name','error'); return; }
+  document.getElementById('st-add-item-modal').remove();
+  window._stItems = window._stItems || [];
+  window._stItems.push({ cat, name, unit, fields,
+    opening_stock:'', in_rooms:'', at_laundry:'', in_storeroom:'', damaged:'', closing_stock:'', notes:'' });
+  renderStocktakeForm(window._stItems, containerId || 'st-form-items', false);
 }
 
 function stCalcClosing(idx) {
