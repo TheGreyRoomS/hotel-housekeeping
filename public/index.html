@@ -591,7 +591,14 @@ async function restoreSession() {
     const ok = await syncState(true); // silent: no toast behind the login screen
     loading(false);
 
-    if (ok) { showApp(); return; }
+    if (ok) {
+      // Silently renew the token so the session stays alive indefinitely
+      try {
+        const r = await api('/api/auth/refresh', { method: 'POST' });
+        if (r && r.token) { token = r.token; saveSession(); }
+      } catch(e) { /* non-fatal — existing token still works */ }
+      showApp(); return;
+    }
 
     if (!token) {
       // api() saw a 401 and already logged us out and cleared storage.

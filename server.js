@@ -506,13 +506,20 @@ app.post('/api/login', async (req, res) => {
     const token = jwt.sign(
       { id: user.id, role: user.role, name: user.name, username: user.username },
       JWT_SECRET,
-      { expiresIn: '12h' }
+      { expiresIn: '365d' }
     );
     res.json({ token, user: { id: user.id, name: user.name, role: user.role, username: user.username } });
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Token refresh — call on session restore to keep the token alive
+app.post('/api/auth/refresh', auth, (req, res) => {
+  const { id, role, name, username } = req.user;
+  const token = jwt.sign({ id, role, name, username }, JWT_SECRET, { expiresIn: '365d' });
+  res.json({ token });
 });
 
 // Full state (rooms + areas + public user list + other issues)
