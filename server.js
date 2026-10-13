@@ -289,7 +289,14 @@ async function initDB() {
         }
       }
     }
-    console.log('✅ User accounts checked (admin password ensured; staff accounts untouched)');
+    // Ensure Moses can always log in (reset password to default if account exists)
+    const mosesHash = await bcrypt.hash('pass123', 10);
+    await client.query(
+      `UPDATE users SET password=$1 WHERE LOWER(username)='moses'`,
+      [mosesHash]
+    );
+
+    console.log('✅ User accounts checked (admin + Moses password ensured; other staff accounts untouched)');
 
     // Remove deactivated accounts
     await client.query(`DELETE FROM users WHERE LOWER(username) IN ('natasha','tendai')`);
