@@ -61,6 +61,8 @@ const AREAS_META = [
   { id: 'a14', name: 'Water Plants',        icon: '💧', linked_room: null },
   { id: 'a15', name: 'Water Plants Rm 3&4 Terrace', icon: '🌱', linked_room: null },
   { id: 'a16', name: 'Other',                       icon: '📍', linked_room: null },
+  { id: 'a17', name: 'Skybar',                      icon: '🍹', linked_room: null },
+  { id: 'a18', name: 'Skybar Windows',              icon: '🪟', linked_room: null },
 ];
 
 const DEFAULT_USERS = [
