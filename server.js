@@ -291,6 +291,9 @@ async function initDB() {
     }
     console.log('✅ User accounts checked (admin password ensured; staff accounts untouched)');
 
+    // Remove deactivated accounts
+    await client.query(`DELETE FROM users WHERE LOWER(username) IN ('natasha','tendai')`);
+
     // Seed rooms if empty
     const { rowCount: rc } = await client.query('SELECT 1 FROM rooms LIMIT 1');
     if (rc === 0) {
