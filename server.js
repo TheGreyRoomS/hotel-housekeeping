@@ -289,10 +289,10 @@ async function initDB() {
         }
       }
     }
-    // Ensure Moses can always log in — normalise username to lowercase and reset password
+    // Ensure Moses can always log in — normalise username, role and reset password
     const mosesHash = await bcrypt.hash('pass123', 10);
     await client.query(
-      `UPDATE users SET username='moses', password=$1 WHERE LOWER(username)='moses'`,
+      `UPDATE users SET username='moses', password=$1, role='housekeeper' WHERE LOWER(username)='moses'`,
       [mosesHash]
     );
 
