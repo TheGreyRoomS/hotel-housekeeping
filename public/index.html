@@ -686,8 +686,10 @@ function defaultView() {
 
 function buildNav() {
   let tabs = [];
+  const isMoses = currentUser.username && currentUser.username.toLowerCase() === 'moses';
   if (currentUser.role === 'housekeeper') {
     tabs = [['my-rooms','🧹 My Work'],['housekeeping','🏠 Housekeeping'],['issues','🔧 Maintenance'],['history','📅 History'],['stocktake','📦 Stock Take']];
+    if (isMoses) tabs.splice(1, 0, ['assignments','📋 Assign']);
   } else if (currentUser.role === 'maintenance') {
     tabs = [['all-rooms','🏨 All Spaces'],['issues','🔧 Maintenance'],['history','📅 History']];
   } else {
