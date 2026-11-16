@@ -289,10 +289,15 @@ async function initDB() {
         }
       }
     }
-    // Ensure Moses's username is lowercase and role is housekeeper — do NOT overwrite password
-    await client.query(
-      `UPDATE users SET username='moses', role='housekeeper' WHERE LOWER(username)='moses'`
-    );
+    // Fix Moses: set correct password once, then never touch it again
+    const mosesMigDone = await client.query(`SELECT 1 FROM settings WHERE key='moses_pw_v3' LIMIT 1`);
+    if (!mosesMigDone.rows.length) {
+      const mosesHash = await bcrypt.hash('Moses123!', 10);
+      await client.query(`UPDATE users SET username='moses', role='housekeeper', password=$1 WHERE LOWER(username)='moses'`, [mosesHash]);
+      await client.query(`INSERT INTO settings (key,value) VALUES ('moses_pw_v3','done') ON CONFLICT DO NOTHING`);
+    } else {
+      await client.query(`UPDATE users SET username='moses', role='housekeeper' WHERE LOWER(username)='moses'`);
+    }
 
     console.log('✅ User accounts checked (admin + Moses password ensured; other staff accounts untouched)');
 
