@@ -561,7 +561,6 @@ function decodeToken(t) {
       (c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
     const p = JSON.parse(json);
     if (!p || !p.id || !p.role || !p.name) return null;
-    if (p.exp && p.exp * 1000 <= Date.now()) return null; // already lapsed
     return { id: p.id, name: p.name, role: p.role, username: p.username };
   } catch (e) { return null; }
 }
