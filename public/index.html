@@ -1010,7 +1010,7 @@ function renderIssues() {
           <div class="mc-acts">
             <span class="ibadge ib-${iss.status}">${iss.status==='open'?'Open':iss.status==='in_progress'?'In Progress':'Resolved'}</span>
             ${iss.status!=='resolved' ? `
-              ${isMaint()&&iss.status==='open'?`<button class="btn btn-sm" style="background:#eff6ff;color:#3b82f6;font-size:11px" onclick="doIssueStatus(${did},'${iss.id}','in_progress')">In Progress</button>`:''}
+              ${(isMaint()||currentUser.username.toLowerCase()==='moses')&&iss.status==='open'?`<button class="btn btn-sm" style="background:#eff6ff;color:#3b82f6;font-size:11px" onclick="doIssueStatus(${did},'${iss.id}','in_progress')">In Progress</button>`:''}
               ${isReception()?`<button class="btn btn-green btn-sm" onclick="openResolve(${did},'${iss.id}')">✓ Resolve</button>`:''}
             ` : ''}
           </div>
@@ -1298,9 +1298,9 @@ function issueHTML(iss, showActions, itemId) {
         </div>
         <span class="ibadge ib-${iss.status}">${iss.status==='open'?'Open':iss.status==='in_progress'?'In Progress':'Resolved'}</span>
       </div>
-      ${showActions&&iss.status!=='resolved'&&(isReception()||isMaint()) ? `
+      ${showActions&&iss.status!=='resolved'&&(isReception()||isMaint()||currentUser.username.toLowerCase()==='moses') ? `
         <div style="margin-top:8px;display:flex;gap:6px">
-          ${iss.status==='open'&&isMaint()?`<button class="btn btn-sm" style="background:#eff6ff;color:#3b82f6;font-size:11px" onclick="doIssueStatus(${did},'${iss.id}','in_progress')">In Progress</button>`:''}
+          ${iss.status==='open'&&(isMaint()||currentUser.username.toLowerCase()==='moses')?`<button class="btn btn-sm" style="background:#eff6ff;color:#3b82f6;font-size:11px" onclick="doIssueStatus(${did},'${iss.id}','in_progress')">In Progress</button>`:''}
           ${isReception()?`<button class="btn btn-green btn-sm" onclick="openResolve(${did},'${iss.id}')">✓ Resolve</button>`:''}
         </div>` : ''}
     </div>`;
