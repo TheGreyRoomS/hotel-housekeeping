@@ -289,11 +289,9 @@ async function initDB() {
         }
       }
     }
-    // Ensure Moses can always log in — normalise username, role and reset password
-    const mosesHash = await bcrypt.hash('pass123', 10);
+    // Ensure Moses's username is lowercase and role is housekeeper — do NOT overwrite password
     await client.query(
-      `UPDATE users SET username='moses', password=$1, role='housekeeper' WHERE LOWER(username)='moses'`,
-      [mosesHash]
+      `UPDATE users SET username='moses', role='housekeeper' WHERE LOWER(username)='moses'`
     );
 
     console.log('✅ User accounts checked (admin + Moses password ensured; other staff accounts untouched)');
