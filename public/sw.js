@@ -1,4 +1,4 @@
-const CACHE = 'hk-v3';
+const CACHE = 'hk-v4';
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', e => {

@@ -28,7 +28,7 @@ function auth(req, res, next) {
   const token  = header.startsWith('Bearer ') ? header.slice(7) : header;
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    req.user = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired session — please log in again' });
