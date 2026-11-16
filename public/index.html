@@ -1892,7 +1892,7 @@ function renderStocktakeShell() {
       <div><div class="pg-title">📦 Stock Take</div><div class="pg-sub">Weekly & Monthly Inventory</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-ghost btn-sm" onclick="printStocktakeSheet()">🖨️ Print Sheet</button>
-        ${isAdmin() ? `<button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>` : ''}
+        ${(isAdmin() || currentUser.username.toLowerCase() === 'alvina' || currentUser.role === 'reception') ? `<button class="btn btn-primary btn-sm" onclick="openNewStocktake()">+ New Stock Take</button>` : ''}
       </div>
     </div>
     <div id="st-list-wrap"></div>`;
@@ -1978,7 +1978,8 @@ async function loadStocktakeList() {
   try {
     const list = await api('/api/stocktakes');
     if (!list.length) {
-      wrap.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted)">No stock takes yet.${isAdmin() ? ' Press <b>+ New Stock Take</b> to begin.' : ''}</div>`;
+      const canCreate = isAdmin() || currentUser.username.toLowerCase() === 'alvina' || currentUser.role === 'reception';
+      wrap.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted)">No stock takes yet.${canCreate ? ' Press <b>+ New Stock Take</b> to begin.' : ''}</div>`;
       return;
     }
     wrap.innerHTML = list.map(st => {
