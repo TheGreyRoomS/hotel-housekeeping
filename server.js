@@ -703,6 +703,10 @@ app.post('/api/issues', auth, async (req, res) => {
 app.patch('/api/issues/:id', auth, async (req, res) => {
   try {
     const { status, resolveNote } = req.body;
+    // Only reception and admin can mark issues resolved
+    if (status === 'resolved' && req.user.role !== 'reception' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only reception staff can resolve issues' });
+    }
     const parts = [], vals = [];
     let n = 1;
     if (status !== undefined) {
